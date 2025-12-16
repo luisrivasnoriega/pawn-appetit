@@ -733,11 +733,11 @@
       "analyzingGames": "Analyzing {{current}} of {{total}} games...",
       "stopAnalysis": "Stop Analysis",
       "analysisSpeeds": {
-        "express": "Express / depth 8",
-        "swift": "Fast / depth 12",
-        "focused": "Intermediate / depth 16",
-        "advanced": "Advanced / depth 20",
-        "deepdive": "Deep / depth 24"
+        "express": "Express / depth 12",
+        "swift": "Fast / depth 16",
+        "focused": "Balanced / depth 20",
+        "advanced": "Advanced / depth 28",
+        "deepdive": "Deep / depth 36"
       },
       "deleteGame": "Delete game",
       "allAccounts": "All Accounts",
