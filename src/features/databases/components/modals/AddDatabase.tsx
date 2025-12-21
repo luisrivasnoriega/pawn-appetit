@@ -20,7 +20,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { appDataDir, resolve } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { type Dispatch, type SetStateAction, useCallback, useMemo, useState } from "react";
+import { remove } from "@tauri-apps/plugin-fs";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { commands, type DatabaseInfo, events, type PuzzleDatabaseInfo } from "@/bindings";
 import FileInput from "@/components/FileInput";
@@ -31,7 +32,7 @@ import { getPuzzleDatabases } from "@/utils/puzzles";
 import { unwrap } from "@/utils/unwrap";
 
 const DB_EXTENSIONS = ["pgn", "pgn.zst"];
-const PUZZLE_EXTENSIONS = ["pgn", "pgn.zst", "db", "db3"];
+const PUZZLE_EXTENSIONS = ["pgn", "pgn.zst", "csv", "csv.zst", "db", "db3"];
 
 interface DatabaseFormValues extends Partial<Extract<DatabaseInfo, { type: "success" }>> {
   title: string;
@@ -78,7 +79,7 @@ const extractFilename = (path: string): string => {
 };
 
 const generateTitleFromFilename = (filename: string): string => {
-  const nameWithoutExt = filename.replace(/\.(pgn|db|db3)(.zst)?$/i, "");
+  const nameWithoutExt = filename.replace(/\.(pgn|csv|db|db3)(.zst)?$/i, "");
   return capitalize(nameWithoutExt.replaceAll(/[_-]/g, " "));
 };
 
@@ -191,6 +192,38 @@ function AddDatabase({
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [firstLevelTab, setFirstLevelTab] = useState<string>(initialTab);
+
+  // Refresh puzzle databases when modal opens or when puzzles are updated
+  useEffect(() => {
+    if (!setPuzzleDbs) return;
+
+    const refreshPuzzleDbs = async () => {
+      console.debug("Refreshing puzzle databases...");
+      try {
+        const updatedPuzzleDbs = await getPuzzleDatabases();
+        console.debug("Updated puzzle databases:", updatedPuzzleDbs.map((db) => db.title));
+        setPuzzleDbs(updatedPuzzleDbs);
+      } catch (error) {
+        console.error("Error refreshing puzzle databases:", error);
+      }
+    };
+
+    // Refresh when modal opens - use a small delay to ensure file system is updated
+    if (opened) {
+      // Immediate refresh
+      refreshPuzzleDbs();
+      // Also refresh after a short delay to catch any file system caching issues
+      const timeoutId = setTimeout(refreshPuzzleDbs, 100);
+      return () => clearTimeout(timeoutId);
+    }
+
+    // Listen for puzzle database updates (e.g., when a database is deleted)
+    window.addEventListener("puzzles:updated", refreshPuzzleDbs);
+
+    return () => {
+      window.removeEventListener("puzzles:updated", refreshPuzzleDbs);
+    };
+  }, [setPuzzleDbs, opened]);
 
   const databaseForm = useForm<DatabaseFormValues>({
     initialValues: {
@@ -316,7 +349,18 @@ function AddDatabase({
     [databases],
   );
 
-  const installedPuzzleTitles = useMemo(() => new Set(puzzleDbs?.map((db) => db.title) || []), [puzzleDbs]);
+  const installedPuzzleTitles = useMemo(() => {
+    // Normalize titles: remove .db3 extension if present for comparison
+    const normalizedTitles = puzzleDbs?.map((db) => {
+      const title = db.title;
+      const normalized = title.endsWith(".db3") ? title.slice(0, -4) : title;
+      console.debug(`Normalizing puzzle title: "${title}" -> "${normalized}"`);
+      return normalized;
+    }) || [];
+    console.debug("Installed puzzle titles (normalized):", normalizedTitles);
+    console.debug("Current puzzleDbs:", puzzleDbs?.map((db) => ({ title: db.title, path: db.path })));
+    return new Set(normalizedTitles);
+  }, [puzzleDbs]);
 
   const handleModalClose = useCallback(() => {
     setOpened(false);
@@ -412,15 +456,23 @@ function AddDatabase({
               ) : (
                 <ScrollArea.Autosize mah={500} offsetScrollbars>
                   <Stack>
-                    {defaultPuzzleDbs?.map((db, i) => (
-                      <PuzzleDbCard
-                        key={`puzzle-db-${db.title}-${i}`}
-                        puzzleDb={db}
-                        databaseId={i}
-                        setPuzzleDbs={setPuzzleDbs || (() => {})}
-                        initInstalled={installedPuzzleTitles.has(`${db.title}.db3`)}
-                      />
-                    ))}
+                    {defaultPuzzleDbs?.map((db, i) => {
+                      const isInstalled = installedPuzzleTitles.has(db.title);
+                      console.debug(`Checking puzzle DB "${db.title}":`, {
+                        isInstalled,
+                        installedTitles: Array.from(installedPuzzleTitles),
+                        puzzleDbs: puzzleDbs?.map((p) => p.title),
+                      });
+                      return (
+                        <PuzzleDbCard
+                          key={`puzzle-db-${db.title}-${i}`}
+                          puzzleDb={db}
+                          databaseId={i}
+                          setPuzzleDbs={setPuzzleDbs || (() => {})}
+                          initInstalled={isInstalled}
+                        />
+                      );
+                    })}
                     {puzzleError && (
                       <Alert icon={<IconAlertCircle size="1rem" />} title={t("common.error")} color="red">
                         {t("features.databases.add.errorFetch")}
@@ -552,8 +604,32 @@ function PuzzleDbCard({ setPuzzleDbs, puzzleDb, databaseId, initInstalled }: Puz
     async (id: number, url: string, name: string) => {
       try {
         setInProgress(true);
-        const path = await resolve(await appDataDir(), "puzzles", `${name}.db3`);
-        await commands.downloadFile(`puzzle_db_${id}`, url, path, null, null, null);
+        
+        // Check if it's a CSV file (needs import) or a database file (direct download)
+        const isCsvFile = url.endsWith(".csv") || url.endsWith(".csv.zst");
+        
+        if (isCsvFile) {
+          // For CSV files, download to a temp location first, then import
+          const tempPath = await resolve(await appDataDir(), "puzzles", `${name}_temp${url.endsWith(".zst") ? ".csv.zst" : ".csv"}`);
+          await commands.downloadFile(`puzzle_db_${id}`, url, tempPath, null, null, null);
+          
+          // Import the downloaded CSV file
+          const dbPath = await resolve(await appDataDir(), "puzzles", `${name}.db3`);
+          await commands.importPuzzleFile(tempPath, dbPath, name, puzzleDb.description || null);
+          
+          // Clean up temp file
+          try {
+            await remove(tempPath);
+          } catch (e) {
+            // Ignore cleanup errors
+            console.warn("Failed to clean up temp file:", e);
+          }
+        } else {
+          // For database files, download directly
+          const path = await resolve(await appDataDir(), "puzzles", `${name}.db3`);
+          await commands.downloadFile(`puzzle_db_${id}`, url, path, null, null, null);
+        }
+        
         await setPuzzleDbs(await getPuzzleDatabases());
       } catch (error) {
         console.error("Failed to download puzzle database:", error);
@@ -562,7 +638,7 @@ function PuzzleDbCard({ setPuzzleDbs, puzzleDb, databaseId, initInstalled }: Puz
         setInProgress(false);
       }
     },
-    [setPuzzleDbs],
+    [setPuzzleDbs, puzzleDb.description],
   );
 
   const handleDownload = useCallback(() => {

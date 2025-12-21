@@ -41,9 +41,20 @@ export const usePuzzleDatabase = () => {
 
   // Load puzzle databases
   useEffect(() => {
-    getPuzzleDatabases().then((databases) => {
-      setPuzzleDbs(databases);
-    });
+    const loadDatabases = () => {
+      getPuzzleDatabases().then((databases) => {
+        setPuzzleDbs(databases);
+      });
+    };
+    
+    loadDatabases();
+    
+    // Listen for puzzle database updates (e.g., when a database is deleted)
+    window.addEventListener("puzzles:updated", loadDatabases);
+    
+    return () => {
+      window.removeEventListener("puzzles:updated", loadDatabases);
+    };
   }, []);
 
   const loadDb3RatingRange = useCallback(
