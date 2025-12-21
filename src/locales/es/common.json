@@ -89,7 +89,6 @@
     "stalemate": "Rey ahogado",
     "white": "Blancas",
     "black": "Negras",
-    "draw": "Tablas",
     "random": "Aleatorio",
     "any": "Cualquiera",
     "player": "Jugador",
@@ -588,11 +587,11 @@
       "analyzingGames": "Analizando {{current}} de {{total}} partidas...",
       "stopAnalysis": "Detener Análisis",
       "analysisSpeeds": {
-        "express": "Express / profundidad 12",
-        "swift": "Rápido / profundidad 16",
-        "focused": "Equilibrado / profundidad 20",
-        "advanced": "Avanzado / profundidad 28",
-        "deepdive": "Profundo / profundidad 36"
+        "express": "Express / profundidad 8",
+        "swift": "Rápido / profundidad 12",
+        "focused": "Intermedio / profundidad 16",
+        "advanced": "Avanzado / profundidad 20",
+        "deepdive": "Profundo / profundidad 24"
       },
       "deleteGame": "Eliminar partida",
       "allAccounts": "Todas las cuentas",
