@@ -31,17 +31,42 @@ export const ADAPTIVE_EASY_MAX_PROB = 0.8;
 
 // Helper functions to get data from different sections
 async function getDatabasesFromDatabasesSection(): Promise<PuzzleDatabaseInfo[]> {
-  const { readDir } = await import("@tauri-apps/plugin-fs");
+  const { readDir, exists } = await import("@tauri-apps/plugin-fs");
   const { BaseDirectory } = await import("@tauri-apps/plugin-fs");
+  const { appDataDir, resolve } = await import("@tauri-apps/api/path");
 
   let dbPuzzles: PuzzleDatabaseInfo[] = [];
 
-  // Get .db3 puzzle databases from AppData/db folder
+  // Get .db3 puzzle databases from AppData/puzzles folder
   try {
     const files = await readDir("puzzles", { baseDir: BaseDirectory.AppData });
     const dbs = files.filter((file) => file.name?.endsWith(".db3"));
-    dbPuzzles = (await Promise.allSettled(dbs.map((db) => getPuzzleDatabase(db.name))))
-      .filter((r) => r.status === "fulfilled")
+    
+    // Verify each file actually exists before trying to get its info
+    const appDataDirPath = await appDataDir();
+    const verifiedDbs = await Promise.all(
+      dbs.map(async (db) => {
+        if (!db.name) return null;
+        const path = await resolve(appDataDirPath, "puzzles", db.name);
+        const fileExists = await exists(path);
+        return fileExists ? db : null;
+      }),
+    );
+    
+    const existingDbs = verifiedDbs.filter((db): db is NonNullable<typeof db> => db !== null);
+    logger.debug(`Found ${existingDbs.length} existing puzzle database files:`, existingDbs.map((db) => db.name));
+    
+    // Get puzzle database info, filtering out any that fail (e.g., file was deleted between check and read)
+    const results = await Promise.allSettled(existingDbs.map((db) => getPuzzleDatabase(db.name)));
+    dbPuzzles = results
+      .filter((r) => {
+        if (r.status === "fulfilled") {
+          return true;
+        }
+        // Log errors but don't include failed databases
+        logger.warn("Failed to load puzzle database:", r.reason);
+        return false;
+      })
       .map((r) => (r as PromiseFulfilledResult<PuzzleDatabaseInfo>).value);
     logger.debug(
       "Loaded puzzle databases:",

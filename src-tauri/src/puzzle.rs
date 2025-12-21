@@ -1,10 +1,12 @@
-use std::{collections::VecDeque, path::PathBuf, sync::Mutex, fs::File, io::Read};
+use std::{collections::VecDeque, path::PathBuf, sync::Mutex, fs::File, io::{Read, BufReader}};
 
 use diesel::{dsl::sql, sql_types::Bool, Connection, ExpressionMethods, QueryDsl, RunQueryDsl, insert_into, connection::SimpleConnection};
 use once_cell::sync::Lazy;
+use serde::Deserialize;
 use serde::Serialize;
 use specta::Type;
 use tauri::{path::BaseDirectory, Manager, Emitter};
+use csv::ReaderBuilder;
 
 use crate::{
     db::{puzzles, Puzzle},
@@ -310,7 +312,14 @@ pub async fn import_puzzle_file(
         std::fs::create_dir_all(parent)?;
     }
 
+    // Check file extension and name to determine format
     let extension = source_file.extension().and_then(|ext| ext.to_str());
+    let file_name = source_file.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    
+    // Check if it's a CSV file (could be .csv or .csv.zst)
+    let is_csv = file_name.ends_with(".csv") || file_name.ends_with(".csv.zst");
     
     match extension {
         Some("db") | Some("db3") => {
@@ -322,8 +331,16 @@ pub async fn import_puzzle_file(
             import_puzzles_from_pgn(&source_file, &db_path, &title, &description, &app).await
         }
         Some("zst") => {
-            // Handle compressed files
-            import_puzzles_from_compressed(&source_file, &db_path, &title, &description, &app).await
+            // Handle compressed files - check if it's CSV or PGN
+            if is_csv {
+                import_puzzles_from_csv_compressed(&source_file, &db_path, &title, &description, &app).await
+            } else {
+                import_puzzles_from_compressed(&source_file, &db_path, &title, &description, &app).await
+            }
+        }
+        Some("csv") => {
+            // Handle uncompressed CSV files
+            import_puzzles_from_csv(&source_file, &db_path, &title, &description, &app).await
         }
         _ => Err(Error::UnsupportedFileFormat(format!(
             "Unsupported file format: {:?}",
@@ -402,7 +419,7 @@ async fn import_puzzles_from_pgn(
     Ok(())
 }
 
-/// Imports puzzles from a compressed file
+/// Imports puzzles from a compressed file (PGN format)
 async fn import_puzzles_from_compressed(
     source_file: &PathBuf,
     db_path: &PathBuf,
@@ -438,6 +455,127 @@ async fn import_puzzles_from_compressed(
         return Err(Error::IoError(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("No valid puzzles found in compressed file '{}'", source_file.display()),
+        )));
+    }
+    
+    let mut db = diesel::SqliteConnection::establish(&db_path.to_string_lossy())?;
+    
+    // Insert puzzles into database in batches
+    let batch_size = 1000;
+    let total_puzzles = puzzles.len();
+    
+    for (i, chunk) in puzzles.chunks(batch_size).enumerate() {
+        db.transaction::<_, Error, _>(|db| {
+            for puzzle in chunk {
+                insert_into(puzzles::table)
+                    .values(puzzle)
+                    .execute(db)?;
+            }
+            Ok(())
+        })?;
+        
+        // Emit progress event
+        let processed = ((i + 1) * batch_size).min(total_puzzles);
+        let _ = app.emit("import_puzzle_progress", (processed, total_puzzles));
+    }
+    
+    Ok(())
+}
+
+/// Imports puzzles from a CSV file
+async fn import_puzzles_from_csv(
+    source_file: &PathBuf,
+    db_path: &PathBuf,
+    title: &str,
+    description: &str,
+    app: &tauri::AppHandle,
+) -> Result<(), Error> {
+    // Create the puzzle database
+    create_puzzle_database(db_path, title, description)?;
+    
+    let file = File::open(source_file).map_err(|e| {
+        Error::IoError(std::io::Error::new(
+            e.kind(),
+            format!("Failed to open CSV file '{}': {}", source_file.display(), e),
+        ))
+    })?;
+    
+    let reader = BufReader::new(file);
+    let puzzles = parse_puzzles_from_csv(reader).map_err(|e| {
+        Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to parse puzzles from CSV file '{}': {}", source_file.display(), e),
+        ))
+    })?;
+    
+    if puzzles.is_empty() {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("No valid puzzles found in CSV file '{}'", source_file.display()),
+        )));
+    }
+    
+    let mut db = diesel::SqliteConnection::establish(&db_path.to_string_lossy())?;
+    
+    // Insert puzzles into database in batches
+    let batch_size = 1000;
+    let total_puzzles = puzzles.len();
+    
+    for (i, chunk) in puzzles.chunks(batch_size).enumerate() {
+        db.transaction::<_, Error, _>(|db| {
+            for puzzle in chunk {
+                insert_into(puzzles::table)
+                    .values(puzzle)
+                    .execute(db)?;
+            }
+            Ok(())
+        })?;
+        
+        // Emit progress event
+        let processed = ((i + 1) * batch_size).min(total_puzzles);
+        let _ = app.emit("import_puzzle_progress", (processed, total_puzzles));
+    }
+    
+    Ok(())
+}
+
+/// Imports puzzles from a compressed CSV file (.csv.zst)
+async fn import_puzzles_from_csv_compressed(
+    source_file: &PathBuf,
+    db_path: &PathBuf,
+    title: &str,
+    description: &str,
+    app: &tauri::AppHandle,
+) -> Result<(), Error> {
+    // Create the puzzle database
+    create_puzzle_database(db_path, title, description)?;
+    
+    let file = File::open(source_file).map_err(|e| {
+        Error::IoError(std::io::Error::new(
+            e.kind(),
+            format!("Failed to open compressed CSV file '{}': {}", source_file.display(), e),
+        ))
+    })?;
+    
+    let decoder = zstd::Decoder::new(file).map_err(|e| {
+        Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to decompress CSV file '{}': {}", source_file.display(), e),
+        ))
+    })?;
+    
+    let reader = BufReader::new(decoder);
+    let puzzles = parse_puzzles_from_csv(reader).map_err(|e| {
+        Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to parse puzzles from compressed CSV file '{}': {}", source_file.display(), e),
+        ))
+    })?;
+    
+    if puzzles.is_empty() {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("No valid puzzles found in compressed CSV file '{}'", source_file.display()),
         )));
     }
     
@@ -632,4 +770,66 @@ impl NewPuzzle {
     fn is_complete(&self) -> bool {
         !self.fen.is_empty() && !self.moves.is_empty()
     }
+}
+
+/// Structure for deserializing Lichess puzzle CSV rows
+#[derive(Debug, Deserialize)]
+struct LichessPuzzleCsv {
+    #[serde(rename = "PuzzleId")]
+    #[allow(dead_code)]
+    puzzle_id: String,
+    #[serde(rename = "FEN")]
+    fen: String,
+    #[serde(rename = "Moves")]
+    moves: String,
+    #[serde(rename = "Rating")]
+    rating: Option<i32>,
+    #[serde(rename = "RatingDeviation")]
+    rating_deviation: Option<i32>,
+    #[serde(rename = "Popularity")]
+    popularity: Option<i32>,
+    #[serde(rename = "NbPlays")]
+    nb_plays: Option<i32>,
+    #[serde(rename = "Themes")]
+    #[allow(dead_code)]
+    themes: Option<String>,
+    #[serde(rename = "GameUrl")]
+    #[allow(dead_code)]
+    game_url: Option<String>,
+}
+
+/// Parses puzzles from a CSV reader
+fn parse_puzzles_from_csv<R: Read>(reader: R) -> Result<Vec<NewPuzzle>, Error> {
+    let mut csv_reader = ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(reader);
+    
+    let mut puzzles = Vec::new();
+    
+    for result in csv_reader.deserialize() {
+        let record: LichessPuzzleCsv = result.map_err(|e| {
+            Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to parse CSV record: {}", e),
+            ))
+        })?;
+        
+        // Skip puzzles with missing required fields
+        if record.fen.is_empty() || record.moves.is_empty() {
+            continue;
+        }
+        
+        let puzzle = NewPuzzle {
+            fen: record.fen,
+            moves: record.moves,
+            rating: record.rating.unwrap_or(1500),
+            rating_deviation: record.rating_deviation.unwrap_or(350),
+            popularity: record.popularity.unwrap_or(0),
+            nb_plays: record.nb_plays.unwrap_or(0),
+        };
+        
+        puzzles.push(puzzle);
+    }
+    
+    Ok(puzzles)
 }
