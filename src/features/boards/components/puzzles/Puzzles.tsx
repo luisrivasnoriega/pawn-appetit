@@ -186,13 +186,48 @@ function Puzzles({ id }: { id: string }) {
       try {
         PUZZLE_DEBUG_LOGS && logger.debug("Loading database info for:", selectedDb);
         
+        // First verify the file exists before attempting to load info
+        const { exists } = await import("@tauri-apps/plugin-fs");
+        const { appDataDir, resolve } = await import("@tauri-apps/api/path");
+        const appDataDirPath = await appDataDir();
+        const dbPath = await resolve(appDataDirPath, "puzzles", selectedDb);
+        
+        const fileExists = await exists(dbPath);
+        if (!fileExists) {
+          PUZZLE_DEBUG_LOGS && logger.debug("Database file does not exist yet:", dbPath);
+          setHasThemes(false);
+          setHasOpeningTags(false);
+          setThemesOptions([]);
+          setOpeningTagsOptions([]);
+          return;
+        }
+        
         // Load column check and themes/opening_tags in parallel for better performance
         const [columnsResult, themesResult, tagsResult] = await Promise.all([
-          commands.checkPuzzleDbColumns(selectedDb),
+          commands.checkPuzzleDbColumns(selectedDb).catch((err) => {
+            // Silently handle "file not found" or "file is empty" errors
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            if (errorMsg.includes("does not exist") || errorMsg.includes("is empty")) {
+              return { status: "error" as const, error: errorMsg };
+            }
+            throw err;
+          }),
           // Start loading themes immediately (will be filtered by column check)
-          commands.getPuzzleThemes(selectedDb).catch(() => ({ status: "error" as const, error: "" })),
+          commands.getPuzzleThemes(selectedDb).catch((err) => {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            if (errorMsg.includes("does not exist") || errorMsg.includes("is empty")) {
+              return { status: "error" as const, error: errorMsg };
+            }
+            return { status: "error" as const, error: "" };
+          }),
           // Start loading opening_tags immediately
-          commands.getPuzzleOpeningTags(selectedDb).catch(() => ({ status: "error" as const, error: "" })),
+          commands.getPuzzleOpeningTags(selectedDb).catch((err) => {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            if (errorMsg.includes("does not exist") || errorMsg.includes("is empty")) {
+              return { status: "error" as const, error: errorMsg };
+            }
+            return { status: "error" as const, error: "" };
+          }),
         ]);
 
         if (cancelled) return;
@@ -232,11 +267,20 @@ function Puzzles({ id }: { id: string }) {
             setOpeningTagsOptions([]);
           }
         } else {
-          PUZZLE_DEBUG_LOGS && logger.error("Columns check failed:", columnsResult);
+          // Database doesn't exist or is empty - silently handle this
+          PUZZLE_DEBUG_LOGS && logger.debug("Columns check failed (database may not be installed):", columnsResult.error);
+          setHasThemes(false);
+          setHasOpeningTags(false);
+          setThemesOptions([]);
+          setOpeningTagsOptions([]);
         }
       } catch (error) {
         if (!cancelled) {
-          logger.error("Failed to load database column info:", error);
+          // Only log non-expected errors (file not found/empty are expected if DB not installed)
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          if (!errorMsg.includes("does not exist") && !errorMsg.includes("is empty")) {
+            logger.error("Failed to load database column info:", error);
+          }
           setHasThemes(false);
           setHasOpeningTags(false);
           setThemesOptions([]);

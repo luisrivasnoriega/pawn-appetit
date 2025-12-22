@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use log::{info, warn};
 use reqwest::{Client, Url};
+use regex::Regex;
 use specta::Type;
 use tauri_specta::Event;
 use tokio::io::AsyncWriteExt;
@@ -15,6 +16,86 @@ use tauri::Manager;
 use crate::error::Error;
 
 const MAX_DOWNLOAD_SIZE: u64 = 10 * 1024 * 1024 * 1024;
+
+/// Attempts to extract the real download URL from SharePoint HTML response
+fn resolve_sharepoint_download_url(html: &str) -> Option<String> {
+    // Try multiple patterns that SharePoint might use
+    
+    // Pattern 1: "downloadUrl":"https:\/\/..."
+    if let Some(re) = Regex::new(r#""downloadUrl"\s*:\s*"([^"]+)""#).ok() {
+        if let Some(caps) = re.captures(html) {
+            if let Some(matched) = caps.get(1) {
+                let mut s = matched.as_str().to_string();
+                s = s.replace(r#"\/"#, "/").replace(r#"\u0026"#, "&");
+                return Some(s);
+            }
+        }
+    }
+    
+    // Pattern 2: downloadUrl":"https://... (without quotes around key)
+    if let Some(re) = Regex::new(r#"downloadUrl["\s]*:\s*["']([^"']+)["']"#).ok() {
+        if let Some(caps) = re.captures(html) {
+            if let Some(matched) = caps.get(1) {
+                let mut s = matched.as_str().to_string();
+                s = s.replace(r#"\/"#, "/").replace(r#"\u0026"#, "&");
+                return Some(s);
+            }
+        }
+    }
+    
+    // Pattern 3: Look for direct download links in script tags or data attributes
+    // SharePoint often embeds URLs in JavaScript variables
+    if let Some(re) = Regex::new(r#"(?:href|src|url|downloadUrl)\s*[:=]\s*["']([^"']*sharepoint[^"']*download[^"']*)["']"#).ok() {
+        if let Some(caps) = re.captures(html) {
+            if let Some(matched) = caps.get(1) {
+                let mut s = matched.as_str().to_string();
+                s = s.replace(r#"\/"#, "/").replace(r#"\u0026"#, "&");
+                // Only return if it looks like a valid URL
+                if s.starts_with("http") {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    
+    // Pattern 4: Look for Microsoft Graph API download URLs
+    if let Some(re) = Regex::new(r#"https://[^"'\s]+sharepoint[^"'\s]+/download"#).ok() {
+        if let Some(caps) = re.captures(html) {
+            if let Some(matched) = caps.get(0) {
+                let s = matched.as_str().to_string();
+                return Some(s);
+            }
+        }
+    }
+    
+    // Pattern 5: Look for action="..." in forms that might contain download URLs
+    if let Some(re) = Regex::new(r#"action\s*=\s*["']([^"']*sharepoint[^"']*download[^"']*)["']"#).ok() {
+        if let Some(caps) = re.captures(html) {
+            if let Some(matched) = caps.get(1) {
+                let mut s = matched.as_str().to_string();
+                s = s.replace(r#"\/"#, "/").replace(r#"\u0026"#, "&");
+                if s.starts_with("http") {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    
+    // Pattern 6: Look for data-download-url or similar data attributes
+    if let Some(re) = Regex::new(r#"data[-_]download[-_]url\s*=\s*["']([^"']+)["']"#).ok() {
+        if let Some(caps) = re.captures(html) {
+            if let Some(matched) = caps.get(1) {
+                let mut s = matched.as_str().to_string();
+                s = s.replace(r#"\/"#, "/").replace(r#"\u0026"#, "&");
+                if s.starts_with("http") {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    
+    None
+}
 
 #[derive(Clone, Type, serde::Serialize, Event)]
 pub struct DownloadProgress {
@@ -71,24 +152,113 @@ pub async fn download_file(
     
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(300))
+        .redirect(reqwest::redirect::Policy::limited(10)) // Follow up to 10 redirects
         .build()?;
 
     let mut req = client.get(&url);
     
-    if let Some(token) = token {
-        req = req.header("Authorization", format!("Bearer {}", token));
+    // Add User-Agent to mimic a browser (required by some servers like SharePoint)
+    req = req.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    
+    // Add Accept header for better compatibility
+    req = req.header("Accept", "*/*");
+    
+    // For SharePoint, add additional headers that may help with direct downloads
+    if url.contains("sharepoint.com") {
+        req = req.header("Accept-Encoding", "gzip, deflate, br");
+        req = req.header("Accept-Language", "en-US,en;q=0.9");
+        req = req.header("Cache-Control", "no-cache");
+        req = req.header("Pragma", "no-cache");
+    }
+    
+    if let Some(ref token_val) = token {
+        req = req.header("Authorization", format!("Bearer {}", token_val));
     }
     
     let res = req.send().await?;
     
     if !res.status().is_success() {
-        return Err(Error::PackageManager(format!(
-            "Download failed: {}",
-            res.status()
-        )));
+        let status = res.status();
+        let error_msg = if status == 403 {
+            // Provide more helpful error message for 403 Forbidden
+            if url.contains("sharepoint.com") {
+                "Download failed: Access denied (403). The SharePoint file may require authentication or the link may need to be shared with 'Anyone with the link' permission."
+            } else {
+                "Download failed: Access denied (403). The server refused to authorize the request."
+            }
+        } else if status == 404 {
+            "Download failed: File not found (404). The file may have been moved or deleted."
+        } else {
+            &format!("Download failed: {}", status)
+        };
+        
+        return Err(Error::PackageManager(error_msg.to_string()));
     }
     
-    let content_length = total_size_u64.or_else(|| res.content_length());
+    // Check Content-Type for SharePoint links - if it's HTML, try to extract the real download URL
+    let mut response_to_use = res;
+    let mut final_url = url.clone();
+    
+    if url.contains("sharepoint.com") {
+        // Get content-type before moving response - copy to String to avoid borrow issues
+        let ct = response_to_use.headers().get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        
+        if ct.contains("text/html") {
+            let body = response_to_use.text().await?; // consume response
+            if let Some(real_url) = resolve_sharepoint_download_url(&body) {
+                info!("Resolved SharePoint real download URL: {}", real_url);
+
+                let mut req2 = client.get(&real_url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept", "*/*");
+
+                // For SharePoint, add additional headers that may help with direct downloads
+                req2 = req2.header("Accept-Encoding", "gzip, deflate, br");
+                req2 = req2.header("Accept-Language", "en-US,en;q=0.9");
+                req2 = req2.header("Cache-Control", "no-cache");
+                req2 = req2.header("Pragma", "no-cache");
+
+                if let Some(ref token_val) = token {
+                    req2 = req2.header("Authorization", format!("Bearer {}", token_val));
+                }
+
+                let res2 = req2.send().await?;
+                if !res2.status().is_success() {
+                    return Err(Error::PackageManager(format!(
+                        "Download failed after resolving SharePoint URL: {}", res2.status()
+                    )));
+                }
+
+                // Check Content-Type again for the resolved URL
+                let ct2 = res2.headers().get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
+                if ct2.contains("text/html") {
+                    return Err(Error::PackageManager(format!(
+                        "SharePoint resolved URL still returned HTML. Content-Type: {}", ct2
+                    )));
+                }
+
+                // Use the resolved response for download
+                response_to_use = res2;
+                final_url = real_url;
+            } else {
+                // Log a sample of the HTML for debugging (first 500 chars)
+                let html_sample = body.chars().take(500).collect::<String>();
+                warn!("SharePoint HTML sample (first 500 chars): {}", html_sample);
+                
+                return Err(Error::PackageManager(format!(
+                    "SharePoint returned HTML and no downloadUrl could be extracted. Content-Type: {}. The link may require authentication or a different format.",
+                    ct
+                )));
+            }
+        }
+    }
+    
+    let content_length = total_size_u64.or_else(|| response_to_use.content_length());
     
     if let Some(size) = content_length {
         if size > MAX_DOWNLOAD_SIZE {
@@ -99,12 +269,12 @@ pub async fn download_file(
         }
     }
 
-    let is_archive = url.ends_with(".zip") || url.ends_with(".tar") || url.ends_with(".tar.gz");
+    let is_archive = final_url.ends_with(".zip") || final_url.ends_with(".tar") || final_url.ends_with(".tar.gz");
     
     if is_archive {
-        download_and_extract(res, content_length, &path, &url, &id, &app, finalize).await?;
+        download_and_extract(response_to_use, content_length, &path, &final_url, &id, &app, finalize).await?;
     } else {
-        download_to_file(res, content_length, &path, &id, &app, finalize).await?;
+        download_to_file(response_to_use, content_length, &path, &id, &app, finalize).await?;
     }
     
     Ok(())

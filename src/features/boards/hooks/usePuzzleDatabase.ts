@@ -130,13 +130,30 @@ export const usePuzzleDatabase = () => {
   const loadRatingRange = useCallback(
     async (dbPath: string) => {
       try {
+        // First verify the file exists before attempting to load rating range
         if (dbPath.endsWith(".db3")) {
+          const { exists } = await import("@tauri-apps/plugin-fs");
+          const { appDataDir, resolve } = await import("@tauri-apps/api/path");
+          const appDataDirPath = await appDataDir();
+          const fullPath = await resolve(appDataDirPath, "puzzles", dbPath);
+          
+          const fileExists = await exists(fullPath);
+          if (!fileExists) {
+            PUZZLE_DEBUG_LOGS && logger.debug("Database file does not exist yet:", fullPath);
+            setDbRatingRange([600, 2800]);
+            return;
+          }
+          
           await loadDb3RatingRange(dbPath);
         } else if (dbPath.endsWith(".pgn")) {
           await loadPgnRatingRange(dbPath);
         }
       } catch (error) {
-        logger.error("Failed to load puzzle rating range:", error);
+        // Silently handle "file not found" or "file is empty" errors
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (!errorMsg.includes("does not exist") && !errorMsg.includes("is empty")) {
+          logger.error("Failed to load puzzle rating range:", error);
+        }
         setDbRatingRange([600, 2800]);
       }
     },

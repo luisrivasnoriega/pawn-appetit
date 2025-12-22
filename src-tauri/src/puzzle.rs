@@ -1,4 +1,4 @@
-use std::{collections::{VecDeque, HashMap}, path::PathBuf, sync::Mutex, fs::File, io::{Read, BufReader}};
+use std::{collections::{VecDeque, HashMap}, path::PathBuf, sync::Mutex, fs::File, io::{Read, BufReader, Seek, SeekFrom}};
 
 use diesel::{dsl::sql, sql_types::Bool, Connection, ExpressionMethods, QueryDsl, RunQueryDsl, insert_into, connection::SimpleConnection, BoolExpressionMethods};
 use once_cell::sync::Lazy;
@@ -682,6 +682,24 @@ pub fn get_puzzle(
 #[tauri::command]
 #[specta::specta]
 pub fn check_puzzle_db_columns(file: String) -> Result<(bool, bool), Error> {
+    // Verify the file exists before trying to open it
+    let file_path = std::path::Path::new(&file);
+    if !file_path.exists() {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Puzzle database file does not exist: {}", file_path.display()),
+        )));
+    }
+    
+    // Verify the file is not empty
+    let metadata = file_path.metadata()?;
+    if metadata.len() == 0 {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Puzzle database file is empty: {}", file_path.display()),
+        )));
+    }
+    
     let mut db = diesel::SqliteConnection::establish(&file)?;
     
     // Use PRAGMA table_info to check if columns exist
@@ -800,6 +818,24 @@ pub struct OpeningTagOption {
 #[tauri::command]
 #[specta::specta]
 pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeGroup>, Error> {
+    // Verify the file exists before trying to open it
+    let file_path = std::path::Path::new(&file);
+    if !file_path.exists() {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Puzzle database file does not exist: {}", file_path.display()),
+        )));
+    }
+    
+    // Verify the file is not empty
+    let metadata = file_path.metadata()?;
+    if metadata.len() == 0 {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Puzzle database file is empty: {}", file_path.display()),
+        )));
+    }
+    
     let mut db = diesel::SqliteConnection::establish(&file)?;
     
     // First check if themes column exists
@@ -943,6 +979,24 @@ pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeGroup>, Error> {
 #[tauri::command]
 #[specta::specta]
 pub fn get_puzzle_opening_tags(file: String) -> Result<Vec<OpeningTagOption>, Error> {
+    // Verify the file exists before trying to open it
+    let file_path = std::path::Path::new(&file);
+    if !file_path.exists() {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Puzzle database file does not exist: {}", file_path.display()),
+        )));
+    }
+    
+    // Verify the file is not empty
+    let metadata = file_path.metadata()?;
+    if metadata.len() == 0 {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Puzzle database file is empty: {}", file_path.display()),
+        )));
+    }
+    
     let mut db = diesel::SqliteConnection::establish(&file)?;
     
     // First check if opening_tags column exists
@@ -1254,6 +1308,80 @@ pub async fn import_puzzle_file(
     }
 }
 
+/// Validates that a file is a valid SQLite database
+fn validate_sqlite_database(file_path: &PathBuf) -> Result<(), Error> {
+    // Verify the file exists
+    if !file_path.exists() {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("File does not exist: {}", file_path.display()),
+        )));
+    }
+    
+    // Verify the file is not empty
+    let metadata = file_path.metadata()?;
+    if metadata.len() == 0 {
+        return Err(Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Database file is empty: {}", file_path.display()),
+        )));
+    }
+    
+    // Verify it's a valid SQLite database by checking the magic header
+    let mut file = File::open(file_path)?;
+    let mut header = [0u8; 16];
+    
+    // Try to read the header, but handle cases where file might be too small
+    match file.read_exact(&mut header) {
+        Ok(_) => {
+            // SQLite database files start with "SQLite format 3\000"
+            let sqlite_magic = b"SQLite format 3\000";
+            if &header[..16] != sqlite_magic {
+                // Check if it might be HTML (common SharePoint error page)
+                let header_str = String::from_utf8_lossy(&header);
+                if header_str.trim_start().starts_with("<!DOCTYPE") 
+                    || header_str.trim_start().starts_with("<html")
+                    || header_str.trim_start().starts_with("<!doctype")
+                    || header_str.trim_start().starts_with("<HTML") {
+                    // Read more of the file to get better diagnostic info
+                    let mut sample = vec![0u8; 512.min(metadata.len() as usize)];
+                    file.seek(SeekFrom::Start(0))?;
+                    file.read_exact(&mut sample[..])?;
+                    let sample_str = String::from_utf8_lossy(&sample);
+                    
+                    return Err(Error::UnsupportedFileFormat(format!(
+                        "Downloaded file appears to be an HTML page ({} bytes), not a database file. This usually means the SharePoint download link is incorrect or requires authentication. Please verify the link allows direct download. First 200 chars: {}",
+                        metadata.len(),
+                        sample_str.chars().take(200).collect::<String>()
+                    )));
+                }
+                
+                // Show first few bytes for debugging
+                let header_hex: String = header.iter().take(32).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                return Err(Error::UnsupportedFileFormat(format!(
+                    "File is not a valid SQLite database. Expected SQLite format, but file header does not match. File size: {} bytes. First 32 bytes (hex): {}. File may be corrupted or in wrong format.",
+                    metadata.len(),
+                    header_hex
+                )));
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+            return Err(Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("File is too small to be a valid SQLite database: {}", file_path.display()),
+            )));
+        }
+        Err(e) => {
+            return Err(Error::IoError(std::io::Error::new(
+                e.kind(),
+                format!("Failed to read file header: {}", e),
+            )));
+        }
+    }
+    
+    Ok(())
+}
+
 /// Copies an existing puzzle database to a new location
 async fn copy_puzzle_database(
     source_file: &PathBuf,
@@ -1261,10 +1389,21 @@ async fn copy_puzzle_database(
     _title: &str,
     _description: &str,
 ) -> Result<(), Error> {
+    // Validate the source file before copying
+    validate_sqlite_database(source_file)?;
+    
     // Copy the source database file to the destination path
     std::fs::copy(source_file, db_path)
         .map_err(|e| Error::IoError(std::io::Error::new(e.kind(), format!("Failed to copy database: {}", e))))?;
     Ok(())
+}
+
+/// Validates a downloaded puzzle database file
+#[tauri::command]
+#[specta::specta]
+pub async fn validate_puzzle_database(file: PathBuf) -> Result<bool, Error> {
+    validate_sqlite_database(&file)?;
+    Ok(true)
 }
 
 /// Imports puzzles from a PGN file

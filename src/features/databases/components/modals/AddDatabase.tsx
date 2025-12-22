@@ -694,7 +694,33 @@ function PuzzleDbCard({ setPuzzleDbs, puzzleDb, databaseId, initInstalled }: Puz
         } else {
           // For database files, download directly
           const path = await resolve(await appDataDir(), "puzzles", `${name}.db3`);
-          await commands.downloadFile(`puzzle_db_${id}`, url, path, null, null, null);
+          console.log("Downloading database file directly to:", path);
+          console.log("Download URL:", url);
+          const result = await commands.downloadFile(`puzzle_db_${id}`, url, path, null, null, null);
+          if (result.status === "error") {
+            throw new Error(result.error);
+          }
+          console.log("Database download completed successfully");
+          
+          // Validate the downloaded file is a valid SQLite database
+          try {
+            const validationResult = await commands.validatePuzzleDatabase(path);
+            if (validationResult.status === "error") {
+              // Remove the invalid file
+              try {
+                const { remove: removeFile } = await import("@tauri-apps/plugin-fs");
+                await removeFile(path);
+                console.debug("Removed invalid database file after validation failed");
+              } catch (cleanupError) {
+                console.warn("Failed to clean up invalid database file:", cleanupError);
+              }
+              throw new Error(validationResult.error);
+            }
+            console.log("Database validation passed");
+          } catch (error) {
+            console.error("Database validation failed:", error);
+            throw error;
+          }
         }
         
         await setPuzzleDbs(await getPuzzleDatabases());
@@ -711,9 +737,27 @@ function PuzzleDbCard({ setPuzzleDbs, puzzleDb, databaseId, initInstalled }: Puz
     [setPuzzleDbs, puzzleDb.description, isCsvFile],
   );
 
-  const handleDownload = useCallback(() => {
-    downloadDatabase(databaseId, puzzleDb.downloadLink || "", puzzleDb.title);
-  }, [downloadDatabase, databaseId, puzzleDb.downloadLink, puzzleDb.title]);
+  const handleDownload = useCallback(async () => {
+    console.log("handleDownload called for:", puzzleDb.title);
+    try {
+      console.log("Starting download for:", puzzleDb.title, "URL:", puzzleDb.downloadLink);
+      if (!puzzleDb.downloadLink) {
+        throw new Error("No download link provided");
+      }
+      await downloadDatabase(databaseId, puzzleDb.downloadLink, puzzleDb.title);
+      console.log("Download completed successfully for:", puzzleDb.title);
+    } catch (error) {
+      console.error("Download failed for:", puzzleDb.title, error);
+      // Show error notification
+      const { notifications } = await import("@mantine/notifications");
+      notifications.show({
+        title: t("common.error"),
+        message: error instanceof Error ? error.message : String(error),
+        color: "red",
+        autoClose: 10000,
+      });
+    }
+  }, [downloadDatabase, databaseId, puzzleDb.downloadLink, puzzleDb.title, t]);
 
   return (
     <Paper withBorder radius="md" p="md">

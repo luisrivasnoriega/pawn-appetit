@@ -569,6 +569,17 @@ async getPuzzleOpeningTags(file: string) : Promise<Result<OpeningTagOption[], st
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Validates a downloaded puzzle database file
+ */
+async validatePuzzleDatabase(file: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("validate_puzzle_database", { file }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getTelemetryEnabled() : Promise<Result<boolean, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_telemetry_enabled") };
