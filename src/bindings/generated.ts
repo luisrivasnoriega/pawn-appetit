@@ -533,15 +533,16 @@ async checkPuzzleDbColumns(file: string) : Promise<Result<[boolean, boolean], st
 },
 /**
  * Gets distinct values for themes from a puzzle database
+ * OPTIMIZED: Uses normalized table if available, otherwise falls back to old method
  * 
  * # Arguments
  * * `file` - Path to the puzzle database
  * 
  * # Returns
- * * `Ok(Vec<String>)` with distinct theme values (split by space if multiple themes per puzzle)
+ * * `Ok(Vec<ThemeOption>)` with distinct theme values and their friendly names
  * * `Err(Error)` if there was a problem accessing the database
  */
-async getPuzzleThemes(file: string) : Promise<Result<string[], string>> {
+async getPuzzleThemes(file: string) : Promise<Result<ThemeOption[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_puzzle_themes", { file }) };
 } catch (e) {
@@ -551,15 +552,16 @@ async getPuzzleThemes(file: string) : Promise<Result<string[], string>> {
 },
 /**
  * Gets distinct values for opening_tags from a puzzle database
+ * OPTIMIZED: Uses normalized table if available, otherwise falls back to old method
  * 
  * # Arguments
  * * `file` - Path to the puzzle database
  * 
  * # Returns
- * * `Ok(Vec<String>)` with distinct opening tag values (only first word before space, split by space)
+ * * `Ok(Vec<OpeningTagOption>)` with distinct opening tag values and their friendly names
  * * `Err(Error)` if there was a problem accessing the database
  */
-async getPuzzleOpeningTags(file: string) : Promise<Result<string[], string>> {
+async getPuzzleOpeningTags(file: string) : Promise<Result<OpeningTagOption[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_puzzle_opening_tags", { file }) };
 } catch (e) {
@@ -739,6 +741,10 @@ export type GoMode = { t: "PlayersTime"; c: PlayersTime } | { t: "Depth"; c: num
  */
 export type MoveAnalysis = { best: BestMoves[]; novelty: boolean; is_sacrifice: boolean }
 export type NormalizedGame = { id: number; fen: string; event: string; event_id: number; site: string; site_id: number; date?: string | null; time?: string | null; round?: string | null; white: string; white_id: number; white_elo?: number | null; black: string; black_id: number; black_elo?: number | null; result: Outcome; time_control?: string | null; eco?: string | null; ply_count?: number | null; moves: string }
+/**
+ * Opening tag option with technical value and friendly label
+ */
+export type OpeningTagOption = { value: string; label: string }
 export type OutOpening = { name: string; fen: string }
 export type Outcome = "1-0" | "0-1" | "1/2-1/2" | "*"
 export type PackageManagerResult = { success: boolean; stdout: string; stderr: string }
@@ -803,6 +809,10 @@ export type SiteStatsData = { site: string; player: string; data: StatsData[] }
 export type SortDirection = "asc" | "desc"
 export type StatsData = { date: string; is_player_white: boolean; player_elo: number; result: GameOutcome; time_control: string; opening: string }
 export type TelemetryConfig = { enabled: boolean; initial_run_completed: boolean }
+/**
+ * Theme option with technical value and friendly label
+ */
+export type ThemeOption = { value: string; label: string }
 export type Token = { type: "ParenOpen" } | { type: "ParenClose" } | { type: "Comment"; value: string } | { type: "San"; value: string } | { type: "Header"; value: { tag: string; value: string } } | { type: "Nag"; value: string } | { type: "Outcome"; value: string }
 export type TournamentQuery = { options: QueryOptions<TournamentSort>; name: string | null }
 export type TournamentSort = "id" | "name"

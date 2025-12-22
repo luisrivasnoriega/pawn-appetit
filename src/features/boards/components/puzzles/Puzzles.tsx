@@ -63,8 +63,8 @@ function Puzzles({ id }: { id: string }) {
   const [hasOpeningTags, setHasOpeningTags] = useState(false);
   const [themes, setThemes] = useState<string[]>([]);
   const [openingTags, setOpeningTags] = useState<string[]>([]);
-  const [themesOptions, setThemesOptions] = useState<string[]>([]);
-  const [openingTagsOptions, setOpeningTagsOptions] = useState<string[]>([]);
+  const [themesOptions, setThemesOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [openingTagsOptions, setOpeningTagsOptions] = useState<Array<{ value: string; label: string }>>([]);
 
   const updateShowingSolution = (isShowing: boolean) => {
     setShowingSolution(isShowing);
@@ -179,11 +179,24 @@ function Puzzles({ id }: { id: string }) {
       return;
     }
 
+    // Use a flag to prevent multiple simultaneous loads
+    let cancelled = false;
+
     const loadDatabaseInfo = async () => {
       try {
         PUZZLE_DEBUG_LOGS && logger.debug("Loading database info for:", selectedDb);
-        // Check if database has themes and opening_tags columns
-        const columnsResult = await commands.checkPuzzleDbColumns(selectedDb);
+        
+        // Load column check and themes/opening_tags in parallel for better performance
+        const [columnsResult, themesResult, tagsResult] = await Promise.all([
+          commands.checkPuzzleDbColumns(selectedDb),
+          // Start loading themes immediately (will be filtered by column check)
+          commands.getPuzzleThemes(selectedDb).catch(() => ({ status: "error" as const, error: "" })),
+          // Start loading opening_tags immediately
+          commands.getPuzzleOpeningTags(selectedDb).catch(() => ({ status: "error" as const, error: "" })),
+        ]);
+
+        if (cancelled) return;
+
         PUZZLE_DEBUG_LOGS && logger.debug("Columns result:", columnsResult);
         if (columnsResult.status === "ok") {
           const [hasThemesCol, hasOpeningTagsCol] = columnsResult.data;
@@ -191,25 +204,27 @@ function Puzzles({ id }: { id: string }) {
           setHasThemes(hasThemesCol);
           setHasOpeningTags(hasOpeningTagsCol);
 
-          // Load distinct values if columns exist
-          if (hasThemesCol) {
-            const themesResult = await commands.getPuzzleThemes(selectedDb);
-            PUZZLE_DEBUG_LOGS && logger.debug("Themes result:", themesResult);
-            if (themesResult.status === "ok") {
-              PUZZLE_DEBUG_LOGS && logger.debug("Themes options count:", themesResult.data.length);
-              setThemesOptions(themesResult.data);
-            }
+          // Use the pre-loaded results
+          if (hasThemesCol && themesResult.status === "ok") {
+            PUZZLE_DEBUG_LOGS && logger.debug("Themes options count:", themesResult.data.length);
+            // Backend returns ThemeOption[] with value and label, convert to format for MultiSelect
+            const themesData = themesResult.data as unknown as Array<{ value: string; label: string }>;
+            setThemesOptions(themesData.map(opt => ({
+              value: opt.value,
+              label: opt.label,
+            })));
           } else {
             setThemesOptions([]);
           }
 
-          if (hasOpeningTagsCol) {
-            const tagsResult = await commands.getPuzzleOpeningTags(selectedDb);
-            PUZZLE_DEBUG_LOGS && logger.debug("Opening tags result:", tagsResult);
-            if (tagsResult.status === "ok") {
-              PUZZLE_DEBUG_LOGS && logger.debug("Opening tags options count:", tagsResult.data.length);
-              setOpeningTagsOptions(tagsResult.data);
-            }
+          if (hasOpeningTagsCol && tagsResult.status === "ok") {
+            PUZZLE_DEBUG_LOGS && logger.debug("Opening tags options count:", tagsResult.data.length);
+            // Backend returns OpeningTagOption[] with value and label, convert to format for MultiSelect
+            const tagsData = tagsResult.data as unknown as Array<{ value: string; label: string }>;
+            setOpeningTagsOptions(tagsData.map(opt => ({
+              value: opt.value,
+              label: opt.label,
+            })));
           } else {
             setOpeningTagsOptions([]);
           }
@@ -217,15 +232,21 @@ function Puzzles({ id }: { id: string }) {
           PUZZLE_DEBUG_LOGS && logger.error("Columns check failed:", columnsResult);
         }
       } catch (error) {
-        logger.error("Failed to load database column info:", error);
-        setHasThemes(false);
-        setHasOpeningTags(false);
-        setThemesOptions([]);
-        setOpeningTagsOptions([]);
+        if (!cancelled) {
+          logger.error("Failed to load database column info:", error);
+          setHasThemes(false);
+          setHasOpeningTags(false);
+          setThemesOptions([]);
+          setOpeningTagsOptions([]);
+        }
       }
     };
 
     loadDatabaseInfo();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedDb]);
 
   return (

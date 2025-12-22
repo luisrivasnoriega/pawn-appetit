@@ -10,3 +10,20 @@ CREATE TABLE IF NOT EXISTS puzzles (
     game_url TEXT,
     opening_tags TEXT
 );
+
+-- Normalized tables for fast filtering
+CREATE TABLE IF NOT EXISTS puzzle_themes (
+    puzzle_id INTEGER NOT NULL,
+    theme TEXT NOT NULL,
+    friendly_name TEXT,
+    PRIMARY KEY (puzzle_id, theme),
+    FOREIGN KEY (puzzle_id) REFERENCES puzzles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS puzzle_opening_tags (
+    puzzle_id INTEGER NOT NULL,
+    opening_tag TEXT NOT NULL,
+    friendly_name TEXT,
+    PRIMARY KEY (puzzle_id, opening_tag),
+    FOREIGN KEY (puzzle_id) REFERENCES puzzles(id) ON DELETE CASCADE
+);
