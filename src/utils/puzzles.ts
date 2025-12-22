@@ -58,27 +58,33 @@ async function getDatabasesFromDatabasesSection(): Promise<PuzzleDatabaseInfo[]>
     
     // Get puzzle database info, filtering out any that fail (e.g., file was deleted between check and read)
     const results = await Promise.allSettled(existingDbs.map((db) => getPuzzleDatabase(db.name)));
-    dbPuzzles = results
-      .filter((r) => {
-        if (r.status === "fulfilled" && r.value !== null) {
-          // Additional validation: ensure the database has puzzles and is not empty
-          const dbInfo = r.value;
-          // Only include databases that have puzzles AND have content (storage_size > 0)
-          // A database with 0 puzzles and 0 bytes is not a valid installed database
-          if (dbInfo.puzzleCount > 0 && dbInfo.storageSize > 0) {
-            return true;
-          }
-          logger.debug(`Skipping empty or invalid puzzle database: ${dbInfo.title} (puzzles: ${dbInfo.puzzleCount}, size: ${dbInfo.storageSize})`);
-          return false;
-        }
-        // Log errors but don't include failed databases
+
+    // Log any failures so we know which databases couldn't be loaded
+    for (const r of results) {
+      if (r.status === "rejected") {
         logger.warn("Failed to load puzzle database:", r.reason);
+      }
+    }
+
+    dbPuzzles = results
+      .filter(
+        (r): r is PromiseFulfilledResult<PuzzleDatabaseInfo> =>
+          r.status === "fulfilled" && r.value !== null,
+      )
+      .filter((r) => {
+        // Additional validation: ensure the database has puzzles and is not empty
+        const dbInfo = r.value;
+        // Only include databases that have puzzles AND have content (storage_size > 0)
+        // A database with 0 puzzles and 0 bytes is not a valid installed database
+        if (dbInfo.puzzleCount > 0 && dbInfo.storageSize > 0) {
+          return true;
+        }
+        logger.debug(
+          `Skipping empty or invalid puzzle database: ${dbInfo.title} (puzzles: ${dbInfo.puzzleCount}, size: ${dbInfo.storageSize})`,
+        );
         return false;
       })
-      .map((r) => {
-        const result = r as PromiseFulfilledResult<PuzzleDatabaseInfo | null>;
-        return result.value!; // Safe because we filtered out null values
-      });
+      .map((r) => r.value);
     logger.debug(
       "Loaded puzzle databases:",
       dbPuzzles.map((db) => ({ title: db.title, puzzleCount: db.puzzleCount })),

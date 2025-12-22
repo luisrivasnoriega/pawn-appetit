@@ -1128,6 +1128,7 @@ function ReportRowLine({
   const position = useStore(store, (s) => s.position);
 
   const theme = useMantineTheme();
+  const { colorScheme } = useMantineColorScheme();
   const { t } = useTranslation();
 
   const white = row.white;
@@ -1167,10 +1168,10 @@ function ReportRowLine({
   const zebra = moveNo % 2 === 0;
 
   const baseBg = zebra
-    ? rgba(theme.colors.gray[6], theme.colorScheme === "dark" ? 0.08 : 0.06)
+    ? rgba(theme.colors.gray[6], colorScheme === "dark" ? 0.08 : 0.06)
     : "transparent";
 
-  const activeBg = rgba(theme.colors[theme.primaryColor][6], theme.colorScheme === "dark" ? 0.22 : 0.14);
+  const activeBg = rgba(theme.colors[theme.primaryColor][6], colorScheme === "dark" ? 0.22 : 0.14);
 
   return (
     <Box>
@@ -1329,6 +1330,7 @@ function ReportMoveCell({
   chevron: { has: boolean; expanded: boolean; onToggle: () => void; tooltip: string };
 }) {
   const theme = useMantineTheme();
+  const { colorScheme } = useMantineColorScheme();
 
   if (!item) return <Box />;
 
@@ -1354,7 +1356,7 @@ function ReportMoveCell({
                 chevron.onToggle();
               }}
               style={{
-                color: theme.colorScheme === "dark" ? theme.colors.gray[2] : theme.colors.gray[7],
+                color: colorScheme === "dark" ? theme.colors.gray[2] : theme.colors.gray[7],
               }}
             >
               {chevron.expanded ? <IconChevronDown size="0.9rem" /> : <IconChevronRight size="0.9rem" />}
