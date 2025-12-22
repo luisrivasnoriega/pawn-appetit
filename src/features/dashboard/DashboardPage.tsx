@@ -878,6 +878,9 @@ export default function DashboardPage() {
                 setActiveTab,
                 pgn,
                 headers,
+                initialAnalysisTab: "analysis",
+                initialAnalysisSubTab: "report",
+                initialNotationView: "report",
               });
               navigate({ to: "/boards" });
             },
@@ -1219,6 +1222,9 @@ export default function DashboardPage() {
                 setActiveTab,
                 pgn,
                 headers,
+                initialAnalysisTab: "analysis",
+                initialAnalysisSubTab: "report",
+                initialNotationView: "report",
               }).then((tabId) => {
                 // Store the gameId in sessionStorage so we can update it when analysis completes
                 if (tabId && typeof window !== "undefined") {
@@ -1251,6 +1257,8 @@ export default function DashboardPage() {
                   setActiveTab,
                   pgn: game.pgn,
                   headers,
+                  initialAnalysisTab: "analysis",
+                  initialNotationView: "report",
                 }).then((tabId) => {
                   // Store the game URL and username in sessionStorage so we can save the analyzed PGN when analysis completes
                   if (tabId && typeof window !== "undefined") {
@@ -1287,6 +1295,8 @@ export default function DashboardPage() {
                   setActiveTab,
                   pgn: game.pgn,
                   headers,
+                  initialAnalysisTab: "analysis",
+                  initialNotationView: "report",
                 }).then((tabId) => {
                   // Store the game ID and username in sessionStorage so we can save the analyzed PGN when analysis completes
                   if (tabId && typeof window !== "undefined") {
