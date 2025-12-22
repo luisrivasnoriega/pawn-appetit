@@ -56,7 +56,12 @@ fn get_theme_friendly_name(theme: &str) -> String {
         ("pin", "Pin"),
         ("promotion", "Promotion"),
         ("queenendgame", "Queen Endgame"),
+        ("queenrookendgame", "Queen & Rook Endgame"),
+        ("queenrook", "Queen & Rook"),
+        ("doublebishopmate", "Double Bishop Mate"),
+        ("doublebishop", "Double Bishop"),
         ("queensideattack", "Queenside Attack"),
+        ("kingsideattack", "Kingside Attack"),
         ("quietmove", "Quiet Move"),
         ("rookendgame", "Rook Endgame"),
         ("sacrifice", "Sacrifice"),
@@ -73,21 +78,81 @@ fn get_theme_friendly_name(theme: &str) -> String {
     .cloned()
     .collect();
     
-    friendly_names.get(theme_lower.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            // Capitalize first letter of each word as fallback
-            theme.split_whitespace()
-                .map(|word| {
-                    let mut chars = word.chars();
-                    match chars.next() {
-                        None => String::new(),
-                        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
+    // Check exact match first
+    if let Some(friendly) = friendly_names.get(theme_lower.as_str()) {
+        return friendly.to_string();
+    }
+    
+    // Try to split camelCase or words separated by common patterns
+    // Split on common word boundaries: lowercase to uppercase transitions, numbers, etc.
+    let mut result = String::new();
+    let mut chars = theme.chars().peekable();
+    let mut prev_was_lower = false;
+    let mut prev_was_upper = false;
+    let mut prev_was_digit = false;
+    let mut word_start = true;
+    
+    while let Some(ch) = chars.next() {
+        let is_upper = ch.is_uppercase();
+        let is_lower = ch.is_lowercase();
+        let is_digit = ch.is_ascii_digit();
+        
+        // Add space before uppercase if previous was lowercase or digit
+        if is_upper && (prev_was_lower || prev_was_digit) && !result.is_empty() {
+            result.push(' ');
+            word_start = true;
+        }
+        // Add space before lowercase if we have multiple uppercase letters in a row (like "QueenRook")
+        else if is_lower && prev_was_upper {
+            if let Some(&next_ch) = chars.peek() {
+                if next_ch.is_uppercase() {
+                    result.push(' ');
+                    word_start = true;
+                }
+            }
+        }
+        // Add space before digit if previous was letter
+        else if is_digit && (prev_was_lower || prev_was_upper) && !result.is_empty() {
+            result.push(' ');
+            word_start = true;
+        }
+        
+        // Handle special cases
+        if ch == '-' || ch == '_' {
+            result.push(' ');
+            word_start = true;
+            continue;
+        }
+        
+        // Capitalize first letter of each word
+        if word_start {
+            result.push_str(&ch.to_uppercase().collect::<String>());
+            word_start = false;
+        } else {
+            result.push(ch);
+        }
+        
+        prev_was_lower = is_lower;
+        prev_was_upper = is_upper;
+        prev_was_digit = is_digit;
+    }
+    
+    // Clean up multiple spaces
+    result = result.split_whitespace().collect::<Vec<_>>().join(" ");
+    
+    // Handle common patterns and fix specific cases
+    result = result
+        .replace("End Game", "Endgame")
+        .replace("Mate In", "Mate in")
+        .replace("Queen Rook", "Queen & Rook")
+        .replace("King Side", "Kingside")
+        .replace("Queen Side", "Queenside")
+        .replace("X Ray", "X-Ray")
+        .replace("En Passant", "En Passant")
+        .replace("F 2 F 7", "f2/f7")
+        .replace("F2 F7", "f2/f7");
+    
+    result
 }
 
 /// Converts a technical opening tag name to a friendly name
@@ -129,21 +194,80 @@ fn get_opening_tag_friendly_name(tag: &str) -> String {
     .cloned()
     .collect();
     
-    friendly_names.get(tag_lower.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            // Capitalize first letter of each word as fallback
-            tag.split_whitespace()
-                .map(|word| {
-                    let mut chars = word.chars();
-                    match chars.next() {
-                        None => String::new(),
-                        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
+    // Check exact match first
+    if let Some(friendly) = friendly_names.get(tag_lower.as_str()) {
+        return friendly.to_string();
+    }
+    
+    // Split camelCase or words separated by common patterns
+    // This handles cases like "QueenRook" -> "Queen Rook"
+    let mut result = String::new();
+    let mut chars = tag.chars().peekable();
+    let mut prev_was_lower = false;
+    let mut prev_was_upper = false;
+    let mut prev_was_digit = false;
+    let mut word_start = true;
+    
+    while let Some(ch) = chars.next() {
+        let is_upper = ch.is_uppercase();
+        let is_lower = ch.is_lowercase();
+        let is_digit = ch.is_ascii_digit();
+        
+        // Add space before uppercase if previous was lowercase or digit
+        if is_upper && (prev_was_lower || prev_was_digit) && !result.is_empty() {
+            result.push(' ');
+            word_start = true;
+        }
+        // Add space before lowercase if we have multiple uppercase letters in a row (like "QueenRook")
+        else if is_lower && prev_was_upper {
+            if let Some(&next_ch) = chars.peek() {
+                if next_ch.is_uppercase() {
+                    result.push(' ');
+                    word_start = true;
+                }
+            }
+        }
+        // Add space before digit if previous was letter
+        else if is_digit && (prev_was_lower || prev_was_upper) && !result.is_empty() {
+            result.push(' ');
+            word_start = true;
+        }
+        
+        // Handle special cases
+        if ch == '-' || ch == '_' {
+            result.push(' ');
+            word_start = true;
+            continue;
+        }
+        
+        // Capitalize first letter of each word
+        if word_start {
+            result.push_str(&ch.to_uppercase().collect::<String>());
+            word_start = false;
+        } else {
+            result.push(ch);
+        }
+        
+        prev_was_lower = is_lower;
+        prev_was_upper = is_upper;
+        prev_was_digit = is_digit;
+    }
+    
+    // Clean up multiple spaces
+    result = result.split_whitespace().collect::<Vec<_>>().join(" ");
+    
+    // Handle common patterns and fix specific cases
+    result = result
+        .replace("Queen Rook", "Queen & Rook")
+        .replace("King Side", "Kingside")
+        .replace("Queen Side", "Queenside")
+        .replace("Semi Slav", "Semi-Slav")
+        .replace("Bogo Indian", "Bogo-Indian")
+        .replace("Nimzo Indian", "Nimzo-Indian")
+        .replace("King S", "King's")
+        .replace("Queen S", "Queen's");
+    
+    result
 }
 
 /// Cache for puzzles to reduce database queries
@@ -587,6 +711,74 @@ pub struct ThemeOption {
     pub label: String,
 }
 
+/// Theme group containing a category name and its themes
+#[derive(Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeGroup {
+    pub group: String,
+    pub items: Vec<ThemeOption>,
+}
+
+/// Gets the category/group for a theme
+fn get_theme_category(theme: &str) -> &'static str {
+    let theme_lower = theme.to_lowercase();
+    
+    // Mate patterns
+    if theme_lower.contains("mate") || theme_lower == "zugzwang" {
+        return "Mate Patterns";
+    }
+    
+    // Tactics
+    if matches!(
+        theme_lower.as_str(),
+        "fork" | "pin" | "skewer" | "deflection" | "discoveredattack" | "x-rayattack" 
+        | "interference" | "intermezzo" | "capturingdefender" | "hangingpiece" 
+        | "trappedpiece" | "doublecheck" | "doublestake" | "exposedking"
+    ) {
+        return "Tactics";
+    }
+    
+    // Endgames
+    if theme_lower.contains("endgame") || theme_lower == "endgame" {
+        return "Endgames";
+    }
+    
+    // Strategy
+    if matches!(
+        theme_lower.as_str(),
+        "advantage" | "equality" | "crushing" | "defensive" | "queensideattack"
+    ) {
+        return "Strategy";
+    }
+    
+    // Special Moves
+    if matches!(
+        theme_lower.as_str(),
+        "castling" | "enpassant" | "promotion" | "underpromotion"
+    ) {
+        return "Special Moves";
+    }
+    
+    // Game Phases
+    if matches!(
+        theme_lower.as_str(),
+        "opening" | "middlegame" | "endgame"
+    ) {
+        return "Game Phases";
+    }
+    
+    // Puzzle Length
+    if matches!(
+        theme_lower.as_str(),
+        "short" | "long" | "verylong" | "one-move"
+    ) {
+        return "Puzzle Length";
+    }
+    
+    // Default category
+    "Other"
+}
+
 /// Opening tag option with technical value and friendly label
 #[derive(Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -607,7 +799,7 @@ pub struct OpeningTagOption {
 #[allow(dead_code)] // Used by frontend via Tauri commands
 #[tauri::command]
 #[specta::specta]
-pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeOption>, Error> {
+pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeGroup>, Error> {
     let mut db = diesel::SqliteConnection::establish(&file)?;
     
     // First check if themes column exists
@@ -650,11 +842,25 @@ pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeOption>, Error> {
             }
             let themes: Vec<ThemeRow> = sql_query("SELECT DISTINCT theme, friendly_name FROM puzzle_themes ORDER BY COALESCE(friendly_name, theme)")
                 .load(&mut db)?;
-            // Return both value (technical) and label (friendly name)
-            return Ok(themes.into_iter().map(|r| ThemeOption {
-                value: r.theme.clone(),
-                label: r.friendly_name.unwrap_or_else(|| get_theme_friendly_name(&r.theme)),
-            }).collect());
+            // Group themes by category
+            let mut grouped: HashMap<String, Vec<ThemeOption>> = HashMap::new();
+            for r in themes {
+                let category = get_theme_category(&r.theme).to_string();
+                let option = ThemeOption {
+                    value: r.theme.clone(),
+                    label: r.friendly_name.unwrap_or_else(|| get_theme_friendly_name(&r.theme)),
+                };
+                grouped.entry(category).or_insert_with(Vec::new).push(option);
+            }
+            // Convert to sorted ThemeGroup vector
+            let mut groups: Vec<ThemeGroup> = grouped.into_iter()
+                .map(|(group, mut items)| {
+                    items.sort_by(|a, b| a.label.cmp(&b.label));
+                    ThemeGroup { group, items }
+                })
+                .collect();
+            groups.sort_by(|a, b| a.group.cmp(&b.group));
+            return Ok(groups);
         } else {
             #[derive(QueryableByName)]
             struct ThemeRow {
@@ -663,10 +869,25 @@ pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeOption>, Error> {
             }
             let themes: Vec<ThemeRow> = sql_query("SELECT DISTINCT theme FROM puzzle_themes ORDER BY theme")
                 .load(&mut db)?;
-            return Ok(themes.into_iter().map(|r| ThemeOption {
-                value: r.theme.clone(),
-                label: get_theme_friendly_name(&r.theme),
-            }).collect());
+            // Group themes by category
+            let mut grouped: HashMap<String, Vec<ThemeOption>> = HashMap::new();
+            for r in themes {
+                let category = get_theme_category(&r.theme).to_string();
+                let option = ThemeOption {
+                    value: r.theme.clone(),
+                    label: get_theme_friendly_name(&r.theme),
+                };
+                grouped.entry(category).or_insert_with(Vec::new).push(option);
+            }
+            // Convert to sorted ThemeGroup vector
+            let mut groups: Vec<ThemeGroup> = grouped.into_iter()
+                .map(|(group, mut items)| {
+                    items.sort_by(|a, b| a.label.cmp(&b.label));
+                    ThemeGroup { group, items }
+                })
+                .collect();
+            groups.sort_by(|a, b| a.group.cmp(&b.group));
+            return Ok(groups);
         }
     }
     
@@ -688,12 +909,25 @@ pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeOption>, Error> {
         }
     }
     
-    let mut result: Vec<ThemeOption> = unique_themes.into_iter().map(|theme| ThemeOption {
-        value: theme.clone(),
-        label: get_theme_friendly_name(&theme),
-    }).collect();
-    result.sort_by(|a, b| a.label.cmp(&b.label));
-    Ok(result)
+    // Group themes by category
+    let mut grouped: HashMap<String, Vec<ThemeOption>> = HashMap::new();
+    for theme in unique_themes {
+        let category = get_theme_category(&theme).to_string();
+        let option = ThemeOption {
+            value: theme.clone(),
+            label: get_theme_friendly_name(&theme),
+        };
+        grouped.entry(category).or_insert_with(Vec::new).push(option);
+    }
+    // Convert to sorted ThemeGroup vector
+    let mut groups: Vec<ThemeGroup> = grouped.into_iter()
+        .map(|(group, mut items)| {
+            items.sort_by(|a, b| a.label.cmp(&b.label));
+            ThemeGroup { group, items }
+        })
+        .collect();
+    groups.sort_by(|a, b| a.group.cmp(&b.group));
+    Ok(groups)
 }
 
 /// Gets distinct values for opening_tags from a puzzle database

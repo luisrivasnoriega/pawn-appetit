@@ -542,7 +542,7 @@ async checkPuzzleDbColumns(file: string) : Promise<Result<[boolean, boolean], st
  * * `Ok(Vec<ThemeOption>)` with distinct theme values and their friendly names
  * * `Err(Error)` if there was a problem accessing the database
  */
-async getPuzzleThemes(file: string) : Promise<Result<ThemeOption[], string>> {
+async getPuzzleThemes(file: string) : Promise<Result<ThemeGroup[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_puzzle_themes", { file }) };
 } catch (e) {
@@ -809,6 +809,10 @@ export type SiteStatsData = { site: string; player: string; data: StatsData[] }
 export type SortDirection = "asc" | "desc"
 export type StatsData = { date: string; is_player_white: boolean; player_elo: number; result: GameOutcome; time_control: string; opening: string }
 export type TelemetryConfig = { enabled: boolean; initial_run_completed: boolean }
+/**
+ * Theme group containing a category name and its themes
+ */
+export type ThemeGroup = { group: string; items: ThemeOption[] }
 /**
  * Theme option with technical value and friendly label
  */

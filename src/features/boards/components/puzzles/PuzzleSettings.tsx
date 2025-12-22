@@ -19,7 +19,7 @@ interface PuzzleSettingsProps {
   onInOrderChange: (value: boolean) => void;
   hasThemes: boolean;
   themes: string[];
-  themesOptions: Array<{ value: string; label: string }>;
+  themesOptions: Array<{ group: string; items: Array<{ value: string; label: string }> }>;
   onThemesChange: (value: string[]) => void;
   hasOpeningTags: boolean;
   openingTags: string[];
