@@ -23,6 +23,7 @@ import {
   IconChevronRight,
   IconEye,
   IconEyeOff,
+  IconFileText,
   IconListTree,
   IconPoint,
   IconPointFilled,
@@ -43,12 +44,13 @@ import * as styles from "./GameNotation.css";
 import * as moveStyles from "./MoveCell.css";
 import OpeningName from "./OpeningName";
 
-type VariationState = "mainline" | "variations" | "repertoire";
+type VariationState = "mainline" | "variations" | "repertoire" | "report";
 
 const variationRefs = {
   mainline: React.createRef<HTMLSpanElement>(),
   variations: React.createRef<HTMLSpanElement>(),
   repertoire: React.createRef<HTMLSpanElement>(),
+  report: React.createRef<HTMLSpanElement>(),
 };
 
 function isOnNextDivergenceFromMainline(node: TreeNode, remainingPath: number[]): boolean {
@@ -102,7 +104,7 @@ function GameNotation({
   const [invisibleValue, setInvisible] = useAtom(currentInvisibleAtom);
   const [variationState, toggleVariationState] = useToggle([
     initialVariationState,
-    ...["mainline", "variations", "repertoire"].filter((v) => v !== initialVariationState),
+    ...["mainline", "variations", "repertoire", "report"].filter((v) => v !== initialVariationState),
   ]) as [VariationState, () => void];
   const [showComments, toggleComments] = useToggle([true, false]);
 
@@ -211,6 +213,22 @@ function GameNotation({
                   variationState={variationState}
                 />
               </Box>
+              <Box
+                style={{
+                  display: variationState === "report" ? "block" : "none",
+                }}
+              >
+                <RenderReport
+                  tree={root}
+                  depth={0}
+                  path={[]}
+                  start={headers.start}
+                  showComments={showComments}
+                  // @ts-expect-error
+                  targetRef={variationRefs.report}
+                  variationState={variationState}
+                />
+              </Box>
             </Box>
             {headers.result && headers.result !== "*" && (
               <Text ta="center">
@@ -269,7 +287,9 @@ function NotationHeader({
                 ? t("features.gameNotation.showVariations")
                 : variationState === "repertoire"
                   ? t("features.gameNotation.repertoireView")
-                  : t("features.gameNotation.mainLine")
+                  : variationState === "report"
+                    ? t("features.gameNotation.reportView")
+                    : t("features.gameNotation.mainLine")
             }
           >
             <ActionIcon onClick={toggleVariationState}>
@@ -277,6 +297,8 @@ function NotationHeader({
                 <IconArrowsSplit size="1rem" />
               ) : variationState === "repertoire" ? (
                 <IconListTree size="1rem" />
+              ) : variationState === "report" ? (
+                <IconFileText size="1rem" />
               ) : (
                 <IconArrowRight size="1rem" />
               )}
@@ -814,6 +836,292 @@ function RepertoireCell({
         targetRef={targetRef}
         variationState={variationState}
       />
+    </Box>
+  );
+}
+
+function RenderReport({
+  tree,
+  depth,
+  path,
+  start,
+  showComments,
+  targetRef,
+  variationState,
+}: {
+  tree: TreeNode;
+  depth: number;
+  path: number[];
+  start?: number[];
+  showComments: boolean;
+  targetRef: React.RefObject<HTMLSpanElement>;
+  variationState: VariationState;
+}) {
+  const variations = tree.children;
+  if (!variations?.length) return null;
+
+  return (
+    <Box component="div" style={{ display: "flex", flexDirection: "column" }}>
+      {variations.map((child, index) => (
+        <ReportLine
+          key={child.fen}
+          tree={child}
+          path={[...path, index]}
+          depth={depth}
+          start={start}
+          showComments={showComments}
+          targetRef={targetRef}
+          variationState={variationState}
+          variantDepth={index > 0 ? 1 : 0}
+          isVariation={index > 0}
+          parentIndentSize={0}
+        />
+      ))}
+    </Box>
+  );
+}
+
+function ReportLine({
+  tree,
+  path,
+  depth,
+  start,
+  showComments,
+  targetRef,
+  variationState,
+  variantDepth,
+  isVariation = false,
+  parentIndentSize = 0,
+}: {
+  tree: TreeNode;
+  path: number[];
+  depth: number;
+  start?: number[];
+  showComments: boolean;
+  targetRef: React.RefObject<HTMLSpanElement>;
+  variationState: VariationState;
+  variantDepth: number;
+  isVariation?: boolean;
+  parentIndentSize?: number;
+}) {
+  // Calculate absolute indent size based on variant depth
+  // This ensures all moves in the same variant have the same indent
+  const absoluteIndentSize = variantDepth * 1.5;
+  // Only apply additional indent if this is the start of a new variation
+  const currentIndentSize = isVariation ? absoluteIndentSize - parentIndentSize : 0;
+
+  // If this node has no move, just recurse into its children
+  if (!tree.san) {
+    const children = tree.children;
+    if (!children?.length) return null;
+
+    return (
+      <>
+        {children.map((child, index) => (
+          <ReportLine
+            key={child.fen}
+            tree={child}
+            path={[...path, index]}
+            depth={depth}
+            start={start}
+            showComments={showComments}
+            targetRef={targetRef}
+            variationState={variationState}
+            variantDepth={variantDepth}
+            isVariation={false}
+            parentIndentSize={absoluteIndentSize}
+          />
+        ))}
+      </>
+    );
+  }
+
+  const moveNumber = Math.ceil(tree.halfMoves / 2);
+  const isWhite = tree.halfMoves % 2 === 1;
+  const children = tree.children || [];
+  const hasMultipleVariations = children.length > 1;
+  const mainLineChild = children[0];
+  
+  // Check if we should show white and black moves on the same line
+  // Incluso si hay múltiples respuestas de negras, mostramos la principal
+  // en la misma línea que la jugada de blancas.
+  const shouldShowBlackOnSameLine =
+    isWhite && mainLineChild && Math.ceil(mainLineChild.halfMoves / 2) === moveNumber;
+
+  // Only show move number for white moves (or start of variation)
+  const showMoveNumber = isWhite || (isVariation && !isWhite);
+  const label = isWhite ? `${moveNumber}.` : (isVariation ? `${moveNumber}...` : "");
+
+  return (
+    <Box
+      component="div"
+      style={{
+        marginLeft: currentIndentSize > 0 ? `${currentIndentSize}rem` : "0",
+        display: "block",
+        marginBottom: "0.1rem",
+      }}
+    >
+      <Box
+        component="div"
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          gap: "0.5rem",
+          flexWrap: "nowrap",
+        }}
+      >
+        {showMoveNumber && (
+          <Text
+            component="span"
+            style={{
+              minWidth: "2.5rem",
+              display: "inline-block",
+              fontSize: "0.9rem",
+            }}
+          >
+            {label}
+          </Text>
+        )}
+        <Box component="span" style={{ display: "inline-block" }}>
+          <CompleteMoveCell
+            targetRef={targetRef}
+            annotations={tree.annotations}
+            comment={tree.comment}
+            halfMoves={0}
+            move={tree.san}
+            fen={tree.fen}
+            movePath={path}
+            showComments={showComments}
+            isStart={equal(path, start)}
+            first={false}
+          />
+        </Box>
+        {/* Render black's response on the same line if it exists and is the main line continuation */}
+        {shouldShowBlackOnSameLine && mainLineChild && (
+          <Box component="span" style={{ display: "inline-block", marginLeft: "0.25rem" }}>
+            <CompleteMoveCell
+              targetRef={targetRef}
+              annotations={mainLineChild.annotations}
+              comment={mainLineChild.comment}
+              halfMoves={0}
+              move={mainLineChild.san}
+              fen={mainLineChild.fen}
+              movePath={[...path, 0]}
+              showComments={showComments}
+              isStart={equal([...path, 0], start)}
+              first={false}
+            />
+          </Box>
+        )}
+      </Box>
+
+      {showComments && tree.comment && (
+        <Box
+          component="div"
+          style={{
+            paddingLeft: "2.5rem",
+            fontSize: "0.875rem",
+            marginTop: "0.25rem",
+          }}
+        >
+          <Comment comment={tree.comment} />
+        </Box>
+      )}
+
+      {/* Render continuation and variations */}
+      {children.length > 0 && (
+        <>
+          {shouldShowBlackOnSameLine && mainLineChild ? (
+            <>
+              {/* 1) Otras respuestas de negras al mismo tiempo (variantes de 5...X) */}
+              {children.map((child, index) => {
+                if (index === 0) return null; // ya se mostró en la misma línea
+
+                const isChildVariation = hasMultipleVariations && index > 0;
+                const childVariantDepth = isChildVariation ? variantDepth + 1 : variantDepth;
+
+                // Estas son siempre variantes: queremos que se muestren como "N..."
+                const isVariationForDisplay = true;
+
+                return (
+                  <ReportLine
+                    key={child.fen}
+                    tree={child}
+                    path={[...path, index]}
+                    depth={depth}
+                    start={start}
+                    showComments={showComments}
+                    targetRef={targetRef}
+                    variationState={variationState}
+                    variantDepth={childVariantDepth}
+                    isVariation={isVariationForDisplay}
+                    parentIndentSize={absoluteIndentSize}
+                  />
+                );
+              })}
+
+              {/* 2) Continuación de la línea principal después de la respuesta principal de negras */}
+              {mainLineChild.children?.map((grandChild, grandIndex) => {
+                const grandChildren = mainLineChild.children || [];
+                const grandHasMultipleVariations = grandChildren.length > 1;
+                const isGrandVariation = grandHasMultipleVariations && grandIndex > 0;
+                const grandVariantDepth = isGrandVariation ? variantDepth + 1 : variantDepth;
+
+                return (
+                  <ReportLine
+                    key={grandChild.fen}
+                    tree={grandChild}
+                    path={[...path, 0, grandIndex]}
+                    depth={depth}
+                    start={start}
+                    showComments={showComments}
+                    targetRef={targetRef}
+                    variationState={variationState}
+                    variantDepth={grandVariantDepth}
+                    isVariation={isGrandVariation}
+                    parentIndentSize={absoluteIndentSize}
+                  />
+                );
+              })}
+            </>
+          ) : (
+            <>
+              {children.map((child, index) => {
+                // Only increase variantDepth when starting a NEW variation (index > 0)
+                // Continuations (index === 0) keep the same variantDepth
+                const isChildVariation = hasMultipleVariations && index > 0;
+                const childVariantDepth = isChildVariation ? variantDepth + 1 : variantDepth;
+                const childIsWhite = child.halfMoves % 2 === 1;
+
+                // Determine if this child is a variation (for display/label purposes)
+                // Queremos que las líneas que empiezan con una jugada de negras en una
+                // posición con múltiples continuaciones se muestren como "N...".
+                // Por ello, en presencia de varias variantes:
+                // - cualquier hijo de negras se trata como variación (para forzar "N...")
+                // - y, como antes, cualquier hijo con index > 0 también es variación.
+                const isVariationForDisplay =
+                  hasMultipleVariations && (!childIsWhite || index > 0);
+
+                return (
+                  <ReportLine
+                    key={child.fen}
+                    tree={child}
+                    path={[...path, index]}
+                    depth={depth}
+                    start={start}
+                    showComments={showComments}
+                    targetRef={targetRef}
+                    variationState={variationState}
+                    variantDepth={childVariantDepth}
+                    isVariation={isVariationForDisplay}
+                    parentIndentSize={absoluteIndentSize}
+                  />
+                );
+              })}
+            </>
+          )}
+        </>
+      )}
     </Box>
   );
 }
