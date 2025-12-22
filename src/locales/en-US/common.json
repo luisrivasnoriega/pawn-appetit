@@ -1146,7 +1146,11 @@
       "showingSolution": "Showing Solution",
       "viewSolution": "View Solution",
       "loadingRatingRange": "Loading rating range...",
-      "enterTitle": "Enter Puzzle Title"
+      "enterTitle": "Enter Puzzle Title",
+      "themes": "Themes",
+      "selectThemes": "Select themes",
+      "openingTags": "Opening Tags",
+      "selectOpeningTags": "Select opening tags"
     },
     "tablebase": {
       "title": "Tablebase",

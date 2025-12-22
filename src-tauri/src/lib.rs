@@ -46,7 +46,7 @@ use crate::package_manager::{
     check_package_installed, check_package_manager_available, find_executable_path, install_package,
 };
 use crate::pgn::{count_pgn_games, delete_game, read_games, write_game};
-use crate::puzzle::{get_puzzle, get_puzzle_db_info, get_puzzle_rating_range, import_puzzle_file};
+use crate::puzzle::{get_puzzle, get_puzzle_db_info, get_puzzle_rating_range, import_puzzle_file, check_puzzle_db_columns, get_puzzle_themes, get_puzzle_opening_tags};
 use crate::telemetry::{get_telemetry_config, get_telemetry_enabled, set_telemetry_enabled, get_user_country_api, get_user_country_locale, get_user_id_command, get_platform_info_command};
 use crate::{
     db::{
@@ -148,6 +148,9 @@ pub async fn run() {
             get_puzzle_db_info,
             get_puzzle_rating_range,
             import_puzzle_file,
+            check_puzzle_db_columns,
+            get_puzzle_themes,
+            get_puzzle_opening_tags,
             get_telemetry_enabled,
             set_telemetry_enabled,
             get_telemetry_config,

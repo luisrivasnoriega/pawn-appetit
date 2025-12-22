@@ -1033,7 +1033,11 @@
       "viewSolution": "Ver solución",
       "loadingRatingRange": "Cargando rango de Elo...",
       "enterTitle": "Introducir título del puzzle",
-      "title": "Puzzle"
+      "title": "Puzzle",
+      "themes": "Temas",
+      "selectThemes": "Seleccionar temas",
+      "openingTags": "Etiquetas de Apertura",
+      "selectOpeningTags": "Seleccionar etiquetas de apertura"
     },
     "tablebase": {
       "title": "Base de finales",

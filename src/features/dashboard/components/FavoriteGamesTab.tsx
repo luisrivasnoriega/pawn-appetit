@@ -133,13 +133,13 @@ export function FavoriteGamesTab({
 
           if (item.type === "local") {
             gameId = item.game.id;
-            pgn = item.game.pgn;
+            pgn = item.game.pgn ?? undefined;
           } else if (item.type === "chesscom") {
             gameId = item.game.url;
-            pgn = item.game.pgn;
+            pgn = item.game.pgn ?? undefined;
           } else {
             gameId = item.game.id;
-            pgn = item.game.pgn;
+            pgn = item.game.pgn ?? undefined;
           }
 
           const analyzedPgn = await getAnalyzedGame(gameId);
@@ -309,10 +309,9 @@ export function FavoriteGamesTab({
                   <Table.Td>
                     <Group gap="xs">
                       {pgn && (
-                        <AnalysisPreview
-                          pgn={pgn}
-                          orientation={item.type === "local" ? (item.game.white.type === "human" ? "white" : "black") : "white"}
-                        />
+                        <AnalysisPreview pgn={pgn}>
+                          <></>
+                        </AnalysisPreview>
                       )}
                       <Text
                         size="sm"

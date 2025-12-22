@@ -342,11 +342,11 @@ export function LocalGamesTab({ games, onAnalyzeGame, onAnalyzeAll, onDeleteGame
                       <ActionIcon
                         size="sm"
                         variant="subtle"
-                        color={favoriteGames.some((f) => f.gameId === g.id && f.gameType === "local") ? "yellow" : "gray"}
+                        color={favoriteGames.some((f) => f.gameId === g.id && f.source === "local") ? "yellow" : "gray"}
                         onClick={() => onToggleFavorite(g.id)}
                         title="Toggle favorite"
                       >
-                        {favoriteGames.some((f) => f.gameId === g.id && f.gameType === "local") ? (
+                        {favoriteGames.some((f) => f.gameId === g.id && f.source === "local") ? (
                           <IconStarFilled size={16} />
                         ) : (
                           <IconStar size={16} />

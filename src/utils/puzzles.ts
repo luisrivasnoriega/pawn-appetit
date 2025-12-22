@@ -61,7 +61,15 @@ async function getDatabasesFromDatabasesSection(): Promise<PuzzleDatabaseInfo[]>
     dbPuzzles = results
       .filter((r) => {
         if (r.status === "fulfilled") {
-          return true;
+          // Additional validation: ensure the database has puzzles and is not empty
+          const dbInfo = r.value;
+          // Only include databases that have puzzles AND have content (storage_size > 0)
+          // A database with 0 puzzles and 0 bytes is not a valid installed database
+          if (dbInfo.puzzleCount > 0 && dbInfo.storageSize > 0) {
+            return true;
+          }
+          logger.debug(`Skipping empty or invalid puzzle database: ${dbInfo.title} (puzzles: ${dbInfo.puzzleCount}, size: ${dbInfo.storageSize})`);
+          return false;
         }
         // Log errors but don't include failed databases
         logger.warn("Failed to load puzzle database:", r.reason);

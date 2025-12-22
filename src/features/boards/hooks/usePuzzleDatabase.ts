@@ -245,7 +245,13 @@ export const usePuzzleDatabase = () => {
     };
   };
 
-  const generatePuzzle = async (db: string, currentRange: [number, number], inOrder: boolean): Promise<Puzzle> => {
+  const generatePuzzle = async (
+    db: string,
+    currentRange: [number, number],
+    inOrder: boolean,
+    themes?: string[],
+    openingTags?: string[],
+  ): Promise<Puzzle> => {
     const dbInfo = puzzleDbs.find((p) => p.path === db);
     if (!dbInfo) {
       throw new Error("Database not found");
@@ -256,10 +262,19 @@ export const usePuzzleDatabase = () => {
         db: dbInfo.title,
         range: currentRange,
         inOrder,
+        themes,
+        openingTags,
       });
 
     if (dbInfo.path.endsWith(".db3")) {
-      const res = await commands.getPuzzle(db, currentRange[0], currentRange[1], !inOrder);
+      const res = await commands.getPuzzle(
+        db,
+        currentRange[0],
+        currentRange[1],
+        !inOrder,
+        themes ?? null,
+        openingTags ?? null,
+      );
       const dbPuzzle = unwrap(res);
       PUZZLE_DEBUG_LOGS &&
         logger.debug("Generated DB3 puzzle:", {

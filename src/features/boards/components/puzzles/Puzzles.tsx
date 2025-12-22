@@ -1,7 +1,7 @@
 import { Divider, Paper, Portal, ScrollArea, Stack } from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtom } from "jotai";
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import ChallengeHistory from "@/components/ChallengeHistory";
 import GameNotation from "@/components/GameNotation";
@@ -15,10 +15,12 @@ import {
   progressivePuzzlesAtom,
   puzzlePlayerRatingAtom,
 } from "@/state/atoms";
+import { commands } from "@/bindings";
 import { positionFromFen } from "@/utils/chessops";
 import { logger } from "@/utils/logger";
 import { navigateToDatabasesWithModal } from "@/utils/navigation";
 import { getAdaptivePuzzleRange, PUZZLE_DEBUG_LOGS } from "@/utils/puzzles";
+import { unwrap } from "@/utils/unwrap";
 import PuzzleBoard from "./PuzzleBoard";
 import { PuzzleControls } from "./PuzzleControls";
 import { PuzzleSettings } from "./PuzzleSettings";
@@ -56,6 +58,14 @@ function Puzzles({ id }: { id: string }) {
   const [showingSolution, setShowingSolution] = useState(false);
   const isShowingSolutionRef = useRef<boolean>(false);
 
+  // Filter states
+  const [hasThemes, setHasThemes] = useState(false);
+  const [hasOpeningTags, setHasOpeningTags] = useState(false);
+  const [themes, setThemes] = useState<string[]>([]);
+  const [openingTags, setOpeningTags] = useState<string[]>([]);
+  const [themesOptions, setThemesOptions] = useState<string[]>([]);
+  const [openingTagsOptions, setOpeningTagsOptions] = useState<string[]>([]);
+
   const updateShowingSolution = (isShowing: boolean) => {
     setShowingSolution(isShowing);
     isShowingSolutionRef.current = isShowing;
@@ -84,7 +94,13 @@ function Puzzles({ id }: { id: string }) {
       });
 
     try {
-      const puzzle = await generatePuzzleFromDb(selectedDb, range, inOrder);
+      const puzzle = await generatePuzzleFromDb(
+        selectedDb,
+        range,
+        inOrder,
+        themes.length > 0 ? themes : undefined,
+        openingTags.length > 0 ? openingTags : undefined,
+      );
       PUZZLE_DEBUG_LOGS &&
         logger.debug("Generated puzzle:", {
           fen: puzzle.fen,
@@ -147,8 +163,70 @@ function Puzzles({ id }: { id: string }) {
       });
     } else {
       setSelectedDb(value);
+      // Reset filters when database changes
+      setThemes([]);
+      setOpeningTags([]);
     }
   };
+
+  // Load database column info and distinct values when database changes
+  useEffect(() => {
+    if (!selectedDb || !selectedDb.endsWith(".db3")) {
+      setHasThemes(false);
+      setHasOpeningTags(false);
+      setThemesOptions([]);
+      setOpeningTagsOptions([]);
+      return;
+    }
+
+    const loadDatabaseInfo = async () => {
+      try {
+        PUZZLE_DEBUG_LOGS && logger.debug("Loading database info for:", selectedDb);
+        // Check if database has themes and opening_tags columns
+        const columnsResult = await commands.checkPuzzleDbColumns(selectedDb);
+        PUZZLE_DEBUG_LOGS && logger.debug("Columns result:", columnsResult);
+        if (columnsResult.status === "ok") {
+          const [hasThemesCol, hasOpeningTagsCol] = columnsResult.data;
+          PUZZLE_DEBUG_LOGS && logger.debug("Has themes:", hasThemesCol, "Has opening tags:", hasOpeningTagsCol);
+          setHasThemes(hasThemesCol);
+          setHasOpeningTags(hasOpeningTagsCol);
+
+          // Load distinct values if columns exist
+          if (hasThemesCol) {
+            const themesResult = await commands.getPuzzleThemes(selectedDb);
+            PUZZLE_DEBUG_LOGS && logger.debug("Themes result:", themesResult);
+            if (themesResult.status === "ok") {
+              PUZZLE_DEBUG_LOGS && logger.debug("Themes options count:", themesResult.data.length);
+              setThemesOptions(themesResult.data);
+            }
+          } else {
+            setThemesOptions([]);
+          }
+
+          if (hasOpeningTagsCol) {
+            const tagsResult = await commands.getPuzzleOpeningTags(selectedDb);
+            PUZZLE_DEBUG_LOGS && logger.debug("Opening tags result:", tagsResult);
+            if (tagsResult.status === "ok") {
+              PUZZLE_DEBUG_LOGS && logger.debug("Opening tags options count:", tagsResult.data.length);
+              setOpeningTagsOptions(tagsResult.data);
+            }
+          } else {
+            setOpeningTagsOptions([]);
+          }
+        } else {
+          PUZZLE_DEBUG_LOGS && logger.error("Columns check failed:", columnsResult);
+        }
+      } catch (error) {
+        logger.error("Failed to load database column info:", error);
+        setHasThemes(false);
+        setHasOpeningTags(false);
+        setThemesOptions([]);
+        setOpeningTagsOptions([]);
+      }
+    };
+
+    loadDatabaseInfo();
+  }, [selectedDb]);
 
   return (
     <>
@@ -181,6 +259,14 @@ function Puzzles({ id }: { id: string }) {
             onHideRatingChange={setHideRating}
             inOrder={inOrder}
             onInOrderChange={setInOrder}
+            hasThemes={hasThemes}
+            themes={themes}
+            themesOptions={themesOptions}
+            onThemesChange={setThemes}
+            hasOpeningTags={hasOpeningTags}
+            openingTags={openingTags}
+            openingTagsOptions={openingTagsOptions}
+            onOpeningTagsChange={setOpeningTags}
           />
           <Divider my="sm" />
 
