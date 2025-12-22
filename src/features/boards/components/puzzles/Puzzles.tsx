@@ -63,7 +63,7 @@ function Puzzles({ id }: { id: string }) {
   const [hasOpeningTags, setHasOpeningTags] = useState(false);
   const [themes, setThemes] = useState<string[]>([]);
   const [openingTags, setOpeningTags] = useState<string[]>([]);
-  const [themesOptions, setThemesOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [themesOptions, setThemesOptions] = useState<Array<{ group: string; items: Array<{ value: string; label: string }> }>>([]);
   const [openingTagsOptions, setOpeningTagsOptions] = useState<Array<{ value: string; label: string }>>([]);
 
   const updateShowingSolution = (isShowing: boolean) => {
@@ -206,12 +206,15 @@ function Puzzles({ id }: { id: string }) {
 
           // Use the pre-loaded results
           if (hasThemesCol && themesResult.status === "ok") {
-            PUZZLE_DEBUG_LOGS && logger.debug("Themes options count:", themesResult.data.length);
-            // Backend returns ThemeOption[] with value and label, convert to format for MultiSelect
-            const themesData = themesResult.data as unknown as Array<{ value: string; label: string }>;
-            setThemesOptions(themesData.map(opt => ({
-              value: opt.value,
-              label: opt.label,
+            PUZZLE_DEBUG_LOGS && logger.debug("Themes groups count:", themesResult.data.length);
+            // Backend returns ThemeGroup[] with group and items, convert to format for MultiSelect
+            const themesData = themesResult.data as unknown as Array<{ group: string; items: Array<{ value: string; label: string }> }>;
+            setThemesOptions(themesData.map(group => ({
+              group: group.group,
+              items: group.items.map(opt => ({
+                value: opt.value,
+                label: opt.label,
+              })),
             })));
           } else {
             setThemesOptions([]);
