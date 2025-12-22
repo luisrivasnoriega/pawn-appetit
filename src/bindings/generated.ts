@@ -124,15 +124,17 @@ async memorySize() : Promise<bigint> {
  * * `min_rating` - Minimum puzzle rating to include
  * * `max_rating` - Maximum puzzle rating to include
  * * `random` - Randomize puzzle in cache
+ * * `themes` - Optional list of themes to filter by (puzzle must contain at least one)
+ * * `opening_tags` - Optional list of opening tags to filter by (puzzle must contain at least one)
  * 
  * # Returns
  * * `Ok(Puzzle)` if a puzzle was found
  * * `Err(Error::NoPuzzles)` if no puzzles match the criteria
  * * Other errors if there was a problem accessing the database
  */
-async getPuzzle(file: string, minRating: number, maxRating: number, random: boolean) : Promise<Result<Puzzle, string>> {
+async getPuzzle(file: string, minRating: number, maxRating: number, random: boolean, themes: string[] | null, openingTags: string[] | null) : Promise<Result<Puzzle, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_puzzle", { file, minRating, maxRating, random }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_puzzle", { file, minRating, maxRating, random, themes, openingTags }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -511,6 +513,60 @@ async importPuzzleFile(sourceFile: string, dbPath: string, title: string, descri
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Checks if a puzzle database has the themes and opening_tags columns
+ * 
+ * # Arguments
+ * * `file` - Path to the puzzle database
+ * 
+ * # Returns
+ * * `Ok((has_themes, has_opening_tags))` indicating which columns exist
+ * * `Err(Error)` if there was a problem accessing the database
+ */
+async checkPuzzleDbColumns(file: string) : Promise<Result<[boolean, boolean], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("check_puzzle_db_columns", { file }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Gets distinct values for themes from a puzzle database
+ * 
+ * # Arguments
+ * * `file` - Path to the puzzle database
+ * 
+ * # Returns
+ * * `Ok(Vec<String>)` with distinct theme values (split by space if multiple themes per puzzle)
+ * * `Err(Error)` if there was a problem accessing the database
+ */
+async getPuzzleThemes(file: string) : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_puzzle_themes", { file }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Gets distinct values for opening_tags from a puzzle database
+ * 
+ * # Arguments
+ * * `file` - Path to the puzzle database
+ * 
+ * # Returns
+ * * `Ok(Vec<String>)` with distinct opening tag values (only first word before space, split by space)
+ * * `Err(Error)` if there was a problem accessing the database
+ */
+async getPuzzleOpeningTags(file: string) : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_puzzle_opening_tags", { file }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getTelemetryEnabled() : Promise<Result<boolean, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_telemetry_enabled") };
@@ -696,7 +752,7 @@ export type PlayerSort = "id" | "name" | "elo"
 export type PlayersTime = { white: number; black: number; winc: number; binc: number }
 export type PositionQueryJs = { fen: string; type_: string }
 export type PositionStats = { move: string; white: number; draw: number; black: number }
-export type Puzzle = { id: number; fen: string; moves: string; rating: number; rating_deviation: number; popularity: number; nb_plays: number }
+export type Puzzle = { id: number; fen: string; moves: string; rating: number; rating_deviation: number; popularity: number; nb_plays: number; themes: string | null; game_url: string | null; opening_tags: string | null }
 /**
  * Information about a puzzle database
  */

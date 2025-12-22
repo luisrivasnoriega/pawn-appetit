@@ -5,5 +5,8 @@ CREATE TABLE IF NOT EXISTS puzzles (
     rating INTEGER NOT NULL,
     rating_deviation INTEGER NOT NULL DEFAULT 0,
     popularity INTEGER NOT NULL DEFAULT 0,
-    nb_plays INTEGER NOT NULL DEFAULT 0
+    nb_plays INTEGER NOT NULL DEFAULT 0,
+    themes TEXT,
+    game_url TEXT,
+    opening_tags TEXT
 );

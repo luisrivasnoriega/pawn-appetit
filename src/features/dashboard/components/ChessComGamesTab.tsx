@@ -402,11 +402,11 @@ export function ChessComGamesTab({
                       <ActionIcon
                         size="sm"
                         variant="subtle"
-                        color={favoriteGames.some((f) => f.gameId === g.url && f.gameType === "chesscom") ? "yellow" : "gray"}
+                        color={favoriteGames.some((f) => f.gameId === g.url && f.source === "chesscom") ? "yellow" : "gray"}
                         onClick={() => onToggleFavorite(g.url)}
                         title="Toggle favorite"
                       >
-                        {favoriteGames.some((f) => f.gameId === g.url && f.gameType === "chesscom") ? (
+                        {favoriteGames.some((f) => f.gameId === g.url && f.source === "chesscom") ? (
                           <IconStarFilled size={16} />
                         ) : (
                           <IconStar size={16} />

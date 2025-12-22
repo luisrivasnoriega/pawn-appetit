@@ -21,6 +21,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { appDataDir, resolve } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { remove } from "@tauri-apps/plugin-fs";
+import { listen } from "@tauri-apps/api/event";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { commands, type DatabaseInfo, events, type PuzzleDatabaseInfo } from "@/bindings";
@@ -83,7 +84,7 @@ const generateTitleFromFilename = (filename: string): string => {
   return capitalize(nameWithoutExt.replaceAll(/[_-]/g, " "));
 };
 
-const useFormValidation = (databases: DatabaseInfo[], puzzleDbs?: PuzzleDatabaseInfo[]) => {
+const useFormValidation = (databases: DatabaseInfo[], puzzleDbs: PuzzleDatabaseInfo[] = []) => {
   const { t } = useTranslation();
 
   const validateDatabaseTitle = useCallback(
@@ -175,7 +176,11 @@ function AddDatabase({
 }: AddDatabaseProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { validateDatabaseTitle, validatePuzzleTitle, validateFile } = useFormValidation(databases, puzzleDbs);
+  
+  // Local state for puzzle databases to ensure we always have the latest
+  const [localPuzzleDbs, setLocalPuzzleDbs] = useState<PuzzleDatabaseInfo[]>(puzzleDbs || []);
+  
+  const { validateDatabaseTitle, validatePuzzleTitle, validateFile } = useFormValidation(databases, localPuzzleDbs);
   const { convertDatabase, importPuzzleFile } = useDatabaseOperations(setLoading, setDatabases, setPuzzleDbs);
 
   const { defaultDatabases, error, isLoading } = useDefaultDatabases(opened);
@@ -193,6 +198,13 @@ function AddDatabase({
   const [importError, setImportError] = useState<string | null>(null);
   const [firstLevelTab, setFirstLevelTab] = useState<string>(initialTab);
 
+  // Sync local state with prop when it changes
+  useEffect(() => {
+    if (puzzleDbs) {
+      setLocalPuzzleDbs(puzzleDbs);
+    }
+  }, [puzzleDbs]);
+
   // Refresh puzzle databases when modal opens or when puzzles are updated
   useEffect(() => {
     if (!setPuzzleDbs) return;
@@ -203,6 +215,7 @@ function AddDatabase({
         const updatedPuzzleDbs = await getPuzzleDatabases();
         console.debug("Updated puzzle databases:", updatedPuzzleDbs.map((db) => db.title));
         setPuzzleDbs(updatedPuzzleDbs);
+        setLocalPuzzleDbs(updatedPuzzleDbs);
       } catch (error) {
         console.error("Error refreshing puzzle databases:", error);
       }
@@ -350,17 +363,18 @@ function AddDatabase({
   );
 
   const installedPuzzleTitles = useMemo(() => {
+    // Use local state which is always up-to-date
     // Normalize titles: remove .db3 extension if present for comparison
-    const normalizedTitles = puzzleDbs?.map((db) => {
+    const normalizedTitles = localPuzzleDbs.map((db) => {
       const title = db.title;
       const normalized = title.endsWith(".db3") ? title.slice(0, -4) : title;
       console.debug(`Normalizing puzzle title: "${title}" -> "${normalized}"`);
       return normalized;
-    }) || [];
+    });
     console.debug("Installed puzzle titles (normalized):", normalizedTitles);
-    console.debug("Current puzzleDbs:", puzzleDbs?.map((db) => ({ title: db.title, path: db.path })));
+    console.debug("Current localPuzzleDbs:", localPuzzleDbs.map((db) => ({ title: db.title, path: db.path })));
     return new Set(normalizedTitles);
-  }, [puzzleDbs]);
+  }, [localPuzzleDbs]);
 
   const handleModalClose = useCallback(() => {
     setOpened(false);
@@ -461,7 +475,8 @@ function AddDatabase({
                       console.debug(`Checking puzzle DB "${db.title}":`, {
                         isInstalled,
                         installedTitles: Array.from(installedPuzzleTitles),
-                        puzzleDbs: puzzleDbs?.map((p) => p.title),
+                        localPuzzleDbs: localPuzzleDbs.map((p) => p.title),
+                        propPuzzleDbs: puzzleDbs?.map((p) => p.title),
                       });
                       return (
                         <PuzzleDbCard
@@ -599,30 +614,82 @@ function DatabaseCard({ setDatabases, database, databaseId, initInstalled }: Dat
 function PuzzleDbCard({ setPuzzleDbs, puzzleDb, databaseId, initInstalled }: PuzzleDbCardProps) {
   const { t } = useTranslation();
   const [inProgress, setInProgress] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [willImport, setWillImport] = useState<boolean>(false); // Flag to indicate we will import after download
+
+  // Check if it's a CSV file (needs import) or a database file (direct download)
+  const isCsvFile = puzzleDb.downloadLink?.endsWith(".csv") || puzzleDb.downloadLink?.endsWith(".csv.zst");
+
+  // Listen to import progress events for CSV files
+  useEffect(() => {
+    if (!isCsvFile) return;
+
+    const unlistenPromise = listen<[number, number]>("import_puzzle_progress", (event) => {
+      const [processed, total] = event.payload;
+      
+      // If total is 0, we're still processing (unknown total)
+      // If processed === total and total > 0, import is complete
+      if (total > 0 && processed === total) {
+        // Import is complete
+        setIsImporting(false);
+      } else if (processed > 0) {
+        // Import is in progress
+        setIsImporting(true);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [isCsvFile]);
+
+  // Combined progress state: true if downloading OR importing
+  const combinedInProgress = inProgress || isImporting || willImport;
 
   const downloadDatabase = useCallback(
     async (id: number, url: string, name: string) => {
       try {
         setInProgress(true);
-        
-        // Check if it's a CSV file (needs import) or a database file (direct download)
-        const isCsvFile = url.endsWith(".csv") || url.endsWith(".csv.zst");
+        setIsImporting(false);
+        setWillImport(isCsvFile); // Set flag early for CSV files
         
         if (isCsvFile) {
           // For CSV files, download to a temp location first, then import
           const tempPath = await resolve(await appDataDir(), "puzzles", `${name}_temp${url.endsWith(".zst") ? ".csv.zst" : ".csv"}`);
-          await commands.downloadFile(`puzzle_db_${id}`, url, tempPath, null, null, null);
-          
-          // Import the downloaded CSV file
           const dbPath = await resolve(await appDataDir(), "puzzles", `${name}.db3`);
-          await commands.importPuzzleFile(tempPath, dbPath, name, puzzleDb.description || null);
           
-          // Clean up temp file
           try {
-            await remove(tempPath);
-          } catch (e) {
-            // Ignore cleanup errors
-            console.warn("Failed to clean up temp file:", e);
+            await commands.downloadFile(`puzzle_db_${id}`, url, tempPath, null, null, null);
+            
+            // Set importing state BEFORE starting import to prevent ProgressButton from
+            // setting inProgress to false when download finishes
+            setWillImport(false); // Clear flag, now we're actually importing
+            setIsImporting(true);
+            
+            // Import the downloaded CSV file
+            await commands.importPuzzleFile(tempPath, dbPath, name, puzzleDb.description || null);
+          } catch (error) {
+            // If import fails, remove the database file if it was created
+            try {
+              const { exists, remove: removeFile } = await import("@tauri-apps/plugin-fs");
+              if (await exists(dbPath)) {
+                await removeFile(dbPath);
+                console.debug("Removed empty database file after failed import");
+              }
+            } catch (cleanupError) {
+              console.warn("Failed to clean up database file after import error:", cleanupError);
+            }
+            setIsImporting(false);
+            setWillImport(false);
+            throw error;
+          } finally {
+            // Clean up temp file
+            try {
+              await remove(tempPath);
+            } catch (e) {
+              // Ignore cleanup errors
+              console.warn("Failed to clean up temp file:", e);
+            }
           }
         } else {
           // For database files, download directly
@@ -635,10 +702,13 @@ function PuzzleDbCard({ setPuzzleDbs, puzzleDb, databaseId, initInstalled }: Puz
         console.error("Failed to download puzzle database:", error);
         throw error;
       } finally {
+        // Ensure all states are cleared when everything is done
         setInProgress(false);
+        setIsImporting(false);
+        setWillImport(false);
       }
     },
-    [setPuzzleDbs, puzzleDb.description],
+    [setPuzzleDbs, puzzleDb.description, isCsvFile],
   );
 
   const handleDownload = useCallback(() => {
@@ -682,12 +752,19 @@ function PuzzleDbCard({ setPuzzleDbs, puzzleDb, databaseId, initInstalled }: Puz
         labels={{
           completed: t("common.installed"),
           action: t("common.install"),
-          inProgress: t("common.downloading"),
-          finalizing: t("common.extracting"),
+          inProgress: isCsvFile && isImporting ? t("common.importing") || "Importing..." : t("common.downloading"),
+          finalizing: isCsvFile && isImporting ? t("common.importing") || "Importing..." : t("common.extracting"),
         }}
         onClick={handleDownload}
-        inProgress={inProgress}
-        setInProgress={setInProgress}
+        inProgress={combinedInProgress}
+        setInProgress={(value) => {
+          // For CSV files, prevent ProgressButton from setting inProgress to false
+          // when download finishes, because we still need to import
+          // For non-CSV files, allow normal behavior
+          if (!isCsvFile || (!isImporting && !willImport)) {
+            setInProgress(value);
+          }
+        }}
       />
     </Paper>
   );

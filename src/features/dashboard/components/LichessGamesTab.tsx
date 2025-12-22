@@ -406,11 +406,11 @@ export function LichessGamesTab({
                       <ActionIcon
                         size="sm"
                         variant="subtle"
-                        color={favoriteGames.some((f) => f.gameId === g.id && f.gameType === "lichess") ? "yellow" : "gray"}
+                        color={favoriteGames.some((f) => f.gameId === g.id && f.source === "lichess") ? "yellow" : "gray"}
                         onClick={() => onToggleFavorite(g.id)}
                         title="Toggle favorite"
                       >
-                        {favoriteGames.some((f) => f.gameId === g.id && f.gameType === "lichess") ? (
+                        {favoriteGames.some((f) => f.gameId === g.id && f.source === "lichess") ? (
                           <IconStarFilled size={16} />
                         ) : (
                           <IconStar size={16} />
