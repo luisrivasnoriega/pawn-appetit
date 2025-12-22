@@ -60,7 +60,7 @@ async function getDatabasesFromDatabasesSection(): Promise<PuzzleDatabaseInfo[]>
     const results = await Promise.allSettled(existingDbs.map((db) => getPuzzleDatabase(db.name)));
     dbPuzzles = results
       .filter((r) => {
-        if (r.status === "fulfilled") {
+        if (r.status === "fulfilled" && r.value !== null) {
           // Additional validation: ensure the database has puzzles and is not empty
           const dbInfo = r.value;
           // Only include databases that have puzzles AND have content (storage_size > 0)
@@ -75,7 +75,10 @@ async function getDatabasesFromDatabasesSection(): Promise<PuzzleDatabaseInfo[]>
         logger.warn("Failed to load puzzle database:", r.reason);
         return false;
       })
-      .map((r) => (r as PromiseFulfilledResult<PuzzleDatabaseInfo>).value);
+      .map((r) => {
+        const result = r as PromiseFulfilledResult<PuzzleDatabaseInfo | null>;
+        return result.value!; // Safe because we filtered out null values
+      });
     logger.debug(
       "Loaded puzzle databases:",
       dbPuzzles.map((db) => ({ title: db.title, puzzleCount: db.puzzleCount })),
@@ -222,11 +225,29 @@ export function getAdaptivePuzzleRange(playerRating: number, recentResults: Comp
   return getPuzzleRangeProb(playerRating, minProb, maxProb);
 }
 
-async function getPuzzleDatabase(name: string): Promise<PuzzleDatabaseInfo> {
+async function getPuzzleDatabase(name: string): Promise<PuzzleDatabaseInfo | null> {
   const appDataDirPath = await appDataDir();
   const path = await resolve(appDataDirPath, "puzzles", name);
 
-  return unwrap(await commands.getPuzzleDbInfo(path));
+  // Check if file exists first to avoid showing errors for missing files
+  const { exists } = await import("@tauri-apps/plugin-fs");
+  const fileExists = await exists(path);
+  if (!fileExists) {
+    return null;
+  }
+
+  const result = await commands.getPuzzleDbInfo(path);
+  if (result.status === "error") {
+    // Silently handle "file not found" or "file is empty" errors
+    const errorMsg = result.error;
+    if (errorMsg.includes("does not exist") || errorMsg.includes("is empty")) {
+      return null;
+    }
+    // For other errors, still throw but don't show alert
+    throw new Error(errorMsg);
+  }
+  
+  return result.data;
 }
 
 export async function getPuzzleDatabases(): Promise<PuzzleDatabaseInfo[]> {
