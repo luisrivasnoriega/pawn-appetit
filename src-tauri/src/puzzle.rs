@@ -505,14 +505,14 @@ impl PuzzleCache {
                 use diesel::sql_query;
                 use diesel::prelude::*;
                 #[derive(QueryableByName)]
-                struct TableInfo {
-                    #[diesel(sql_type = diesel::sql_types::Text, column_name = "name")]
-                    name: String,
+                struct CountResult {
+                    #[diesel(sql_type = diesel::sql_types::BigInt, column_name = "count")]
+                    count: i64,
                 }
-                let tables: Vec<TableInfo> = sql_query(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
+                let result: Vec<CountResult> = sql_query(
+                    "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
                 ).load(&mut db).unwrap_or_default();
-                tables.len() < 2
+                result.first().map(|r| r.count).unwrap_or(0) < 2
             };
             
             if needs_migration {
@@ -528,14 +528,14 @@ impl PuzzleCache {
                 use diesel::sql_query;
                 use diesel::prelude::*;
                 #[derive(QueryableByName)]
-                struct TableInfo {
-                    #[diesel(sql_type = diesel::sql_types::Text, column_name = "name")]
-                    name: String,
+                struct CountResult {
+                    #[diesel(sql_type = diesel::sql_types::BigInt, column_name = "count")]
+                    count: i64,
                 }
-                let tables: Vec<TableInfo> = sql_query(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
+                let result: Vec<CountResult> = sql_query(
+                    "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
                 ).load(&mut db).unwrap_or_default();
-                tables.len() == 2
+                result.first().map(|r| r.count).unwrap_or(0) == 2
             };
             
             let new_puzzles = if has_normalized_tables && (themes.is_some() || opening_tags.is_some()) {
@@ -848,15 +848,15 @@ pub fn get_puzzle_themes(file: String) -> Result<Vec<ThemeGroup>, Error> {
     use diesel::sql_query;
     use diesel::prelude::*;
     #[derive(QueryableByName)]
-    struct TableInfo {
-        #[diesel(sql_type = diesel::sql_types::Text, column_name = "name")]
-        name: String,
+    struct CountResult {
+        #[diesel(sql_type = diesel::sql_types::BigInt, column_name = "count")]
+        count: i64,
     }
-    let tables: Vec<TableInfo> = sql_query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='puzzle_themes'"
+    let result: Vec<CountResult> = sql_query(
+        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='puzzle_themes'"
     ).load(&mut db).unwrap_or_default();
     
-    if !tables.is_empty() {
+    if result.first().map(|r| r.count).unwrap_or(0) > 0 {
         // Use normalized table - MUCH faster!
         // Check if friendly_name column exists
         #[derive(QueryableByName)]
@@ -1009,15 +1009,15 @@ pub fn get_puzzle_opening_tags(file: String) -> Result<Vec<OpeningTagOption>, Er
     use diesel::sql_query;
     use diesel::prelude::*;
     #[derive(QueryableByName)]
-    struct TableInfo {
-        #[diesel(sql_type = diesel::sql_types::Text, column_name = "name")]
-        name: String,
+    struct CountResult {
+        #[diesel(sql_type = diesel::sql_types::BigInt, column_name = "count")]
+        count: i64,
     }
-    let tables: Vec<TableInfo> = sql_query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='puzzle_opening_tags'"
+    let result: Vec<CountResult> = sql_query(
+        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='puzzle_opening_tags'"
     ).load(&mut db).unwrap_or_default();
     
-    if !tables.is_empty() {
+    if result.first().map(|r| r.count).unwrap_or(0) > 0 {
         // Use normalized table - MUCH faster!
         // Check if friendly_name column exists
         #[derive(QueryableByName)]
@@ -1337,7 +1337,7 @@ fn validate_sqlite_database(file_path: &PathBuf) -> Result<(), Error> {
             // SQLite database files start with "SQLite format 3\000"
             let sqlite_magic = b"SQLite format 3\000";
             if &header[..16] != sqlite_magic {
-                // Check if it might be HTML (common SharePoint error page)
+                // Check if it might be HTML (common error page)
                 let header_str = String::from_utf8_lossy(&header);
                 if header_str.trim_start().starts_with("<!DOCTYPE") 
                     || header_str.trim_start().starts_with("<html")
@@ -1350,7 +1350,7 @@ fn validate_sqlite_database(file_path: &PathBuf) -> Result<(), Error> {
                     let sample_str = String::from_utf8_lossy(&sample);
                     
                     return Err(Error::UnsupportedFileFormat(format!(
-                        "Downloaded file appears to be an HTML page ({} bytes), not a database file. This usually means the SharePoint download link is incorrect or requires authentication. Please verify the link allows direct download. First 200 chars: {}",
+                        "Downloaded file appears to be an HTML page ({} bytes), not a database file. Please verify the link allows direct download. First 200 chars: {}",
                         metadata.len(),
                         sample_str.chars().take(200).collect::<String>()
                     )));
@@ -1964,26 +1964,26 @@ fn migrate_puzzle_database_to_normalized(db_path: &PathBuf) -> Result<(), Error>
     use diesel::sql_query;
     use diesel::prelude::*;
     #[derive(QueryableByName)]
-    struct TableInfo {
-        #[diesel(sql_type = diesel::sql_types::Text, column_name = "name")]
-        name: String,
+    struct CountResult {
+        #[diesel(sql_type = diesel::sql_types::BigInt, column_name = "count")]
+        count: i64,
     }
-    let tables: Vec<TableInfo> = sql_query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
+    let result: Vec<CountResult> = sql_query(
+        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
     ).load(&mut db).unwrap_or_default();
     
-    if tables.len() == 2 {
+    if result.first().map(|r| r.count).unwrap_or(0) == 2 {
         // Tables already exist, migration not needed
         return Ok(());
     }
     
     // Check if tables exist and what columns they have
-    let existing_tables: Vec<TableInfo> = sql_query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
+    let existing_count: Vec<CountResult> = sql_query(
+        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name IN ('puzzle_themes', 'puzzle_opening_tags')"
     ).load(&mut db).unwrap_or_default();
     
     // Create normalized tables if they don't exist
-    if existing_tables.is_empty() {
+    if existing_count.first().map(|r| r.count).unwrap_or(0) == 0 {
         db.batch_execute(
             r#"
             CREATE TABLE IF NOT EXISTS puzzle_themes (
