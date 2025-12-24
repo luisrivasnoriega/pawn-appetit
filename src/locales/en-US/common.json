@@ -1044,7 +1044,8 @@
         "removeEmpty": "Remove Empty Games",
         "actions": "Actions",
         "addGames": "Add Games",
-        "exportPGN": "Export to PGN"
+        "exportPGN": "Export to PGN",
+        "selected": "selected"
       },
       "delete": {
         "title": "Delete Database",

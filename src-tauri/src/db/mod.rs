@@ -55,7 +55,7 @@ pub use self::search::{
     is_position_in_db, search_position, PositionQuery, PositionQueryJs, PositionStats,
 };
 pub use self::position_cache::{
-    is_position_cached, get_cached_position, save_position_cache,
+    is_position_cached, get_cached_position, save_position_cache, clear_cache_for_database,
 };
 
 const INDEXES_SQL: &str = include_str!("../../../database/queries/indexes/create_indexes.sql");
@@ -1718,6 +1718,148 @@ pub async fn export_to_pgn(
             Ok(())
         })
         .collect::<Result<Vec<_>>>()?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_position_games_to_pgn(
+    file: PathBuf,
+    fen: String,
+    dest_file: PathBuf,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<()> {
+    use crate::db::position_cache::{get_cached_position, normalize_db_path};
+    
+    // Get cached game IDs for this position
+    let db_path_str = normalize_db_path(&file);
+    let game_ids = match get_cached_position(&app, &fen, &file)? {
+        Some((_, ids)) => ids,
+        None => return Err(Error::PackageManager("Position not found in cache".to_string())),
+    };
+    
+    if game_ids.is_empty() {
+        return Err(Error::PackageManager("No games found for this position".to_string()));
+    }
+    
+    let db = &mut get_db_or_create(&state, file.to_str().unwrap(), ConnectionOptions::default())?;
+    
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(dest_file)?;
+    
+    let mut writer = BufWriter::new(file);
+    
+    let (white_players, black_players) = diesel::alias!(players as white, players as black);
+    games::table
+        .inner_join(white_players.on(games::white_id.eq(white_players.field(players::id))))
+        .inner_join(black_players.on(games::black_id.eq(black_players.field(players::id))))
+        .inner_join(events::table.on(games::event_id.eq(events::id)))
+        .inner_join(sites::table.on(games::site_id.eq(sites::id)))
+        .filter(games::id.eq_any(&game_ids))
+        .load_iter::<(Game, Player, Player, Event, Site), DefaultLoadingMode>(db)?
+        .flatten()
+        .map(|(game, white, black, event, site)| {
+            let pgn = PgnGame {
+                event: event.name,
+                site: site.name,
+                date: game.date,
+                round: game.round,
+                white: white.name,
+                black: black.name,
+                result: game.result,
+                time_control: game.time_control,
+                eco: game.eco,
+                white_elo: game.white_elo.map(|e| e.to_string()),
+                black_elo: game.black_elo.map(|e| e.to_string()),
+                ply_count: game.ply_count.map(|e| e.to_string()),
+                fen: game.fen.clone(),
+                moves: GameTree::from_bytes(
+                    &game.moves,
+                    game.fen
+                        .map(|fen| Fen::from_ascii(fen.as_bytes()).ok())
+                        .flatten()
+                        .map(|fen| Chess::from_setup(fen.into(), CastlingMode::Chess960).ok())
+                        .flatten()
+                )?.to_string(),
+            };
+            
+            pgn.write(&mut writer)?;
+            
+            Ok(())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    
+    info!("Exported {} games from position {} to PGN", game_ids.len(), fen);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_selected_games_to_pgn(
+    file: PathBuf,
+    game_ids: Vec<i32>,
+    dest_file: PathBuf,
+    state: tauri::State<'_, AppState>,
+) -> Result<()> {
+    if game_ids.is_empty() {
+        return Err(Error::PackageManager("No games selected".to_string()));
+    }
+    
+    let db = &mut get_db_or_create(&state, file.to_str().unwrap(), ConnectionOptions::default())?;
+    
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(dest_file)?;
+    
+    let mut writer = BufWriter::new(file);
+    
+    let (white_players, black_players) = diesel::alias!(players as white, players as black);
+    games::table
+        .inner_join(white_players.on(games::white_id.eq(white_players.field(players::id))))
+        .inner_join(black_players.on(games::black_id.eq(black_players.field(players::id))))
+        .inner_join(events::table.on(games::event_id.eq(events::id)))
+        .inner_join(sites::table.on(games::site_id.eq(sites::id)))
+        .filter(games::id.eq_any(&game_ids))
+        .load_iter::<(Game, Player, Player, Event, Site), DefaultLoadingMode>(db)?
+        .flatten()
+        .map(|(game, white, black, event, site)| {
+            let pgn = PgnGame {
+                event: event.name,
+                site: site.name,
+                date: game.date,
+                round: game.round,
+                white: white.name,
+                black: black.name,
+                result: game.result,
+                time_control: game.time_control,
+                eco: game.eco,
+                white_elo: game.white_elo.map(|e| e.to_string()),
+                black_elo: game.black_elo.map(|e| e.to_string()),
+                ply_count: game.ply_count.map(|e| e.to_string()),
+                fen: game.fen.clone(),
+                moves: GameTree::from_bytes(
+                    &game.moves,
+                    game.fen
+                        .map(|fen| Fen::from_ascii(fen.as_bytes()).ok())
+                        .flatten()
+                        .map(|fen| Chess::from_setup(fen.into(), CastlingMode::Chess960).ok())
+                        .flatten()
+                )?.to_string(),
+            };
+            
+            pgn.write(&mut writer)?;
+            
+            Ok(())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    
+    info!("Exported {} selected games to PGN", game_ids.len());
     Ok(())
 }
 

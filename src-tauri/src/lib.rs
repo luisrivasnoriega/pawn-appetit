@@ -35,7 +35,7 @@ use crate::chess::{
 };
 use crate::db::{
     clear_games, convert_pgn, create_indexes, delete_database, delete_db_game, delete_empty_games,
-    delete_indexes, export_to_pgn, get_player, get_players_game_info, get_tournaments,
+    delete_indexes, export_to_pgn, export_position_games_to_pgn, export_selected_games_to_pgn, get_player, get_players_game_info, get_tournaments,
     search_position,
 };
 use crate::fide::{download_fide_db, find_fide_player, fetch_fide_profile_html, save_fide_photo};
@@ -134,6 +134,8 @@ pub async fn run() {
             delete_db_game,
             delete_database,
             export_to_pgn,
+            export_position_games_to_pgn,
+            export_selected_games_to_pgn,
             authenticate,
             write_game,
             download_fide_db,
