@@ -122,13 +122,27 @@ function MoveControls({
     nextRaw(true); // Play sound on first call
     
     // Start interval for subsequent calls (key held down)
-    // Use requestAnimationFrame for smoother updates
+    // Use requestAnimationFrame with progressive acceleration for smoother experience
     let lastTime = performance.now();
+    let interval = 50; // Start with 50ms interval
+    let moveCount = 0;
+    
     const animate = (timestamp: number) => {
       const now = performance.now();
-      if (now - lastTime >= 50) { // Update every 50ms
+      if (now - lastTime >= interval) {
         nextRaw(false); // No sound during rapid navigation
         lastTime = now;
+        moveCount++;
+        
+        // Progressive acceleration: speed up after initial moves
+        // Start at 50ms, accelerate to 25ms after 5 moves, then to 20ms after 10 moves
+        if (moveCount === 5) {
+          interval = 30;
+        } else if (moveCount === 10) {
+          interval = 25;
+        } else if (moveCount === 20) {
+          interval = 20; // Maximum speed
+        }
       }
       
       if (nextIntervalRef.current !== null) {
@@ -136,7 +150,12 @@ function MoveControls({
       }
     };
     
-    nextIntervalRef.current = requestAnimationFrame(animate);
+    // Small delay before starting rapid navigation to distinguish single click from hold
+    setTimeout(() => {
+      if (nextIntervalRef.current === null) {
+        nextIntervalRef.current = requestAnimationFrame(animate);
+      }
+    }, 150); // 150ms delay before rapid navigation starts
   }, [nextRaw]);
 
   const previous = useCallback(() => {
@@ -149,13 +168,27 @@ function MoveControls({
     previousRaw();
     
     // Start interval for subsequent calls (key held down)
-    // Use requestAnimationFrame for smoother updates
+    // Use requestAnimationFrame with progressive acceleration for smoother experience
     let lastTime = performance.now();
+    let interval = 50; // Start with 50ms interval
+    let moveCount = 0;
+    
     const animate = (timestamp: number) => {
       const now = performance.now();
-      if (now - lastTime >= 50) { // Update every 50ms
+      if (now - lastTime >= interval) {
         previousRaw();
         lastTime = now;
+        moveCount++;
+        
+        // Progressive acceleration: speed up after initial moves
+        // Start at 50ms, accelerate to 30ms after 5 moves, then to 25ms after 10 moves
+        if (moveCount === 5) {
+          interval = 30;
+        } else if (moveCount === 10) {
+          interval = 25;
+        } else if (moveCount === 20) {
+          interval = 20; // Maximum speed
+        }
       }
       
       if (previousIntervalRef.current !== null) {
@@ -163,28 +196,52 @@ function MoveControls({
       }
     };
     
-    previousIntervalRef.current = requestAnimationFrame(animate);
+    // Small delay before starting rapid navigation to distinguish single click from hold
+    setTimeout(() => {
+      if (previousIntervalRef.current === null) {
+        previousIntervalRef.current = requestAnimationFrame(animate);
+      }
+    }, 150); // 150ms delay before rapid navigation starts
   }, [previousRaw]);
 
   // Listen for keyup events to stop navigation
+  // Also listen for keydown to handle edge cases where keyup might be missed
   useEffect(() => {
     const handleKeyUp = (e: KeyboardEvent) => {
-      const keyMap = {
-        ArrowRight: "next",
-        ArrowLeft: "previous",
-      } as const;
-      
-      const direction = keyMap[e.key as keyof typeof keyMap];
-      if (direction === "next") {
-        stopNextNavigation();
-      } else if (direction === "previous") {
-        stopPreviousNavigation();
+      // Only handle arrow keys
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        if (e.key === "ArrowRight") {
+          stopNextNavigation();
+        } else if (e.key === "ArrowLeft") {
+          stopPreviousNavigation();
+        }
       }
     };
 
-    window.addEventListener("keyup", handleKeyUp);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If a different arrow key is pressed while one is held, stop the current navigation
+      if (e.key === "ArrowRight" && previousIntervalRef.current !== null) {
+        stopPreviousNavigation();
+      } else if (e.key === "ArrowLeft" && nextIntervalRef.current !== null) {
+        stopNextNavigation();
+      }
+    };
+
+    // Use capture phase to catch events early
+    window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("keydown", handleKeyDown, true);
+    
+    // Also listen for blur events (when window loses focus) to stop navigation
+    const handleBlur = () => {
+      stopNextNavigation();
+      stopPreviousNavigation();
+    };
+    window.addEventListener("blur", handleBlur);
+    
     return () => {
-      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("keyup", handleKeyUp, true);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("blur", handleBlur);
     };
   }, [stopNextNavigation, stopPreviousNavigation]);
 
