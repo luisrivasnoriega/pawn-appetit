@@ -85,8 +85,10 @@ function MoveControls({
   // Handle smooth navigation when keys are held down
   const nextIntervalRef = useRef<number | null>(null);
   const previousIntervalRef = useRef<number | null>(null);
+  const nextTimeoutRef = useRef<number | null>(null);
+  const previousTimeoutRef = useRef<number | null>(null);
 
-  // Cleanup intervals on unmount
+  // Cleanup intervals and timeouts on unmount
   useEffect(() => {
     return () => {
       if (nextIntervalRef.current !== null) {
@@ -95,10 +97,22 @@ function MoveControls({
       if (previousIntervalRef.current !== null) {
         cancelAnimationFrame(previousIntervalRef.current);
       }
+      if (nextTimeoutRef.current !== null) {
+        clearTimeout(nextTimeoutRef.current);
+      }
+      if (previousTimeoutRef.current !== null) {
+        clearTimeout(previousTimeoutRef.current);
+      }
     };
   }, []);
 
   const stopNextNavigation = useCallback(() => {
+    // Clear the timeout if it exists (key released before rapid navigation starts)
+    if (nextTimeoutRef.current !== null) {
+      clearTimeout(nextTimeoutRef.current);
+      nextTimeoutRef.current = null;
+    }
+    // Clear the animation frame if it exists (key released during rapid navigation)
     if (nextIntervalRef.current !== null) {
       cancelAnimationFrame(nextIntervalRef.current);
       nextIntervalRef.current = null;
@@ -106,6 +120,12 @@ function MoveControls({
   }, []);
 
   const stopPreviousNavigation = useCallback(() => {
+    // Clear the timeout if it exists (key released before rapid navigation starts)
+    if (previousTimeoutRef.current !== null) {
+      clearTimeout(previousTimeoutRef.current);
+      previousTimeoutRef.current = null;
+    }
+    // Clear the animation frame if it exists (key released during rapid navigation)
     if (previousIntervalRef.current !== null) {
       cancelAnimationFrame(previousIntervalRef.current);
       previousIntervalRef.current = null;
@@ -151,8 +171,12 @@ function MoveControls({
     };
     
     // Small delay before starting rapid navigation to distinguish single click from hold
-    setTimeout(() => {
-      if (nextIntervalRef.current === null) {
+    // Only start rapid navigation if the key is still held (timeout not cleared means key was released)
+    nextTimeoutRef.current = window.setTimeout(() => {
+      // Check if timeout was not cleared (meaning key is still held)
+      if (nextTimeoutRef.current !== null && nextIntervalRef.current === null) {
+        // Key is still held, start rapid navigation
+        nextTimeoutRef.current = null; // Clear timeout ref
         nextIntervalRef.current = requestAnimationFrame(animate);
       }
     }, 150); // 150ms delay before rapid navigation starts
@@ -197,8 +221,12 @@ function MoveControls({
     };
     
     // Small delay before starting rapid navigation to distinguish single click from hold
-    setTimeout(() => {
-      if (previousIntervalRef.current === null) {
+    // Only start rapid navigation if the key is still held (timeout not cleared means key was released)
+    previousTimeoutRef.current = window.setTimeout(() => {
+      // Check if timeout was not cleared (meaning key is still held)
+      if (previousTimeoutRef.current !== null && previousIntervalRef.current === null) {
+        // Key is still held, start rapid navigation
+        previousTimeoutRef.current = null; // Clear timeout ref
         previousIntervalRef.current = requestAnimationFrame(animate);
       }
     }, 150); // 150ms delay before rapid navigation starts
