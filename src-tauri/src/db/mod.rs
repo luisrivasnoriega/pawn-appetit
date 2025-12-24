@@ -5,6 +5,7 @@ mod schema;
 mod search;
 mod core;
 mod pgn;
+mod position_cache;
 
 use crate::{
     db::{
@@ -52,6 +53,9 @@ pub use self::models::Puzzle;
 pub use self::schema::puzzles;
 pub use self::search::{
     is_position_in_db, search_position, PositionQuery, PositionQueryJs, PositionStats,
+};
+pub use self::position_cache::{
+    is_position_cached, get_cached_position, save_position_cache,
 };
 
 const INDEXES_SQL: &str = include_str!("../../../database/queries/indexes/create_indexes.sql");
@@ -1480,6 +1484,7 @@ pub async fn get_players_game_info(
 #[specta::specta]
 pub async fn delete_database(
     file: PathBuf,
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<()> {
     use std::fs::remove_file;
@@ -1510,7 +1515,7 @@ pub async fn delete_database(
         log::info!("Closed connection pool for: {:?}", file);
     }
     
-    // Clear any cached data for this database
+    // Clear any cached data for this database (both in-memory and persistent cache)
     let cache_keys_to_remove: Vec<_> = state.line_cache.iter()
         .filter(|entry| entry.key().1 == file)
         .map(|entry| entry.key().clone())
@@ -1518,6 +1523,11 @@ pub async fn delete_database(
     
     for key in cache_keys_to_remove {
         state.line_cache.remove(&key);
+    }
+    
+    // Clear persistent position cache for this database
+    if let Err(e) = crate::db::position_cache::clear_cache_for_database(&app, &file) {
+        log::warn!("Failed to clear position cache for database: {}", e);
     }
     
     log::info!("Waiting for file handles to be released...");
