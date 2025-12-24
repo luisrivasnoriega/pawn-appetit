@@ -313,7 +313,7 @@ function DatabasePanel() {
             games={openingData?.games || []} 
             loading={isLoading}
             fen={db === "local" ? localOptions.fen : debouncedFen}
-            databasePath={db === "local" ? localOptions.path : undefined}
+            databasePath={db === "local" ? (localOptions.path ?? undefined) : undefined}
           />
         </PanelWithError>
         <PanelWithError value="options" error={error} type={db}>
