@@ -296,7 +296,12 @@ function DatabasePanel() {
           <OpeningsTable openings={openingData?.openings || []} loading={isLoading} />
         </PanelWithError>
         <PanelWithError value="games" error={error} type={db}>
-          <GamesTable games={openingData?.games || []} loading={isLoading} />
+          <GamesTable 
+            games={openingData?.games || []} 
+            loading={isLoading}
+            fen={db === "local" ? localOptions.fen : debouncedFen}
+            databasePath={db === "local" ? localOptions.path : undefined}
+          />
         </PanelWithError>
         <PanelWithError value="options" error={error} type={db}>
           <ScrollArea h="100%" offsetScrollbars>

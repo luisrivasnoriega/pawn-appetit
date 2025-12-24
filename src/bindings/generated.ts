@@ -347,6 +347,22 @@ async exportToPgn(file: string, destFile: string) : Promise<Result<null, string>
     else return { status: "error", error: e  as any };
 }
 },
+async exportPositionGamesToPgn(file: string, fen: string, destFile: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_position_games_to_pgn", { file, fen, destFile }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async exportSelectedGamesToPgn(file: string, gameIds: number[], destFile: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_selected_games_to_pgn", { file, gameIds, destFile }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async authenticate(username: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("authenticate", { username }) };

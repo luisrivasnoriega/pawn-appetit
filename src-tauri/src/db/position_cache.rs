@@ -10,7 +10,7 @@ use crate::db::PositionStats;
 
 /// Normalize database path for consistent comparison
 /// Attempts to canonicalize the path, falls back to normalizing separators
-fn normalize_db_path(path: &Path) -> String {
+pub fn normalize_db_path(path: &Path) -> String {
     // Try to canonicalize first (resolves symlinks, absolute paths, etc.)
     if let Ok(canonical) = path.canonicalize() {
         canonical.to_string_lossy().to_string()
