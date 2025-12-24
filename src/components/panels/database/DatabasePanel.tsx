@@ -13,6 +13,7 @@ import {
   currentDbTypeAtom,
   currentLocalOptionsAtom,
   currentTabAtom,
+  currentTabSelectedAtom,
   lichessOptionsAtom,
   masterOptionsAtom,
   referenceDbAtom,
@@ -106,14 +107,21 @@ function DatabasePanel() {
   const [gameLimit, setGameLimit] = useState(1000);
   const tab = useAtomValue(currentTabAtom);
   const [tabType, setTabType] = useAtom(currentDbTabAtom);
+  const currentTabSelected = useAtomValue(currentTabSelectedAtom);
   const prevFenRef = useRef<string>(fen);
   const tabValue = tab?.value ?? "analysis";
+  
+  // Only search when we're in the database tab and viewing stats or games
+  const isDatabaseTabActive = currentTabSelected === "database";
+  const isStatsOrGamesTab = tabType === "stats" || tabType === "games";
+  const shouldSearch = isDatabaseTabActive && isStatsOrGamesTab;
 
   // Update localOptions immediately when FEN changes (before debounce)
   // This ensures the query always uses the latest FEN
   // Always load 1000 games sorted by elo when FEN changes
+  // ONLY update if we're in the database tab and viewing stats or games
   useEffect(() => {
-    if (db === "local") {
+    if (db === "local" && shouldSearch) {
       const fenChanged = fen !== prevFenRef.current;
       if (fenChanged) {
         prevFenRef.current = fen;
@@ -134,16 +142,17 @@ function DatabasePanel() {
         setGameLimit(1000);
       }
     }
-  }, [fen, setLocalOptions, db, queryClient]);
+  }, [fen, setLocalOptions, db, queryClient, shouldSearch]);
 
   // Handle debounced FEN for final query invalidation
   // This ensures we don't trigger too many queries during rapid FEN changes
+  // ONLY invalidate if we're in the database tab and viewing stats or games
   useEffect(() => {
-    if (db === "local" && debouncedFen === fen) {
+    if (db === "local" && debouncedFen === fen && shouldSearch) {
       // Only invalidate when debounce settles and matches current FEN
       queryClient.invalidateQueries({ queryKey: ["database-opening"] });
     }
-  }, [debouncedFen, fen, db, queryClient]);
+  }, [debouncedFen, fen, db, queryClient, shouldSearch]);
 
   useEffect(() => {
     if (db === "local") {
@@ -174,7 +183,11 @@ function DatabasePanel() {
     [db, localOptions, lichessOptions, masterOptions, debouncedFen],
   );
 
-  const queryEnabled = tabType !== "options" && (db !== "local" || (!!localOptions.fen && !!localOptions.path));
+  // Only enable query when:
+  // 1. We're in the database tab (currentTabSelected === "database")
+  // 2. We're viewing stats or games (not options)
+  // 3. For local DB, we have FEN and path
+  const queryEnabled = shouldSearch && (db !== "local" || (!!localOptions.fen && !!localOptions.path));
 
   const {
     data: openingData,
