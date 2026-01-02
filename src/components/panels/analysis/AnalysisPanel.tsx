@@ -92,59 +92,70 @@ function AnalysisPanel() {
   const allEnabled = allEnabledLoader.state === "hasData" && allEnabledLoader.data;
 
   const activeTab = useAtomValue(activeTabAtom);
-  
-  // Read initial configuration from sessionStorage synchronously before first render
-  const initialTabFromConfig = useMemo(() => {
-    if (activeTab && typeof window !== "undefined") {
-      const configKey = `${activeTab}_initialConfig`;
-      const configJson = sessionStorage.getItem(configKey);
-      if (configJson) {
-        try {
-          const config = JSON.parse(configJson);
-          if (config.analysisSubTab && ["engines", "report", "logs"].includes(config.analysisSubTab)) {
-            return config.analysisSubTab;
-          }
-        } catch (e) {
-          // Ignore parsing errors
-        }
-      }
-    }
-    return null;
-  }, [activeTab]);
+  const [configTabOverride, setConfigTabOverride] = useState<"engines" | "report" | "logs" | null>(null);
 
   const [tab, setTab] = useAtom(currentAnalysisTabAtom);
   const [expanded, setExpanded] = useAtom(currentExpandedEnginesAtom);
 
   // Use the configured tab value if available, otherwise use the atom value
-  const effectiveTab = initialTabFromConfig || tab;
+  const effectiveTab = configTabOverride || tab;
 
-  // Set the initial tab value from configuration and clean up config
+  // Read initial configuration (per board tab) and apply it once.
   useEffect(() => {
-    if (initialTabFromConfig && tab !== initialTabFromConfig) {
-      setTab(initialTabFromConfig);
-      // Remove analysisSubTab from config after using it
-      if (activeTab && typeof window !== "undefined") {
-        const configKey = `${activeTab}_initialConfig`;
-        const configJson = sessionStorage.getItem(configKey);
-        if (configJson) {
-          try {
-            const config = JSON.parse(configJson);
-            const updatedConfig = { ...config };
-            delete updatedConfig.analysisSubTab;
-            if (Object.keys(updatedConfig).length === 0) {
-              sessionStorage.removeItem(configKey);
-            } else {
-              sessionStorage.setItem(configKey, JSON.stringify(updatedConfig));
-            }
-          } catch (e) {
-            // Ignore parsing errors
-          }
+    if (!activeTab || typeof window === "undefined") {
+      setConfigTabOverride(null);
+      return;
+    }
+
+    const configKey = `${activeTab}_initialConfig`;
+    const configJson = sessionStorage.getItem(configKey);
+    if (!configJson) {
+      setConfigTabOverride(null);
+      return;
+    }
+
+    try {
+      const config = JSON.parse(configJson);
+      const next = config.analysisSubTab;
+      if (next && ["engines", "report", "logs"].includes(next)) {
+        setConfigTabOverride(next);
+        return;
+      }
+    } catch {
+      // Ignore parsing errors
+    }
+
+    setConfigTabOverride(null);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!activeTab || typeof window === "undefined") return;
+    if (!configTabOverride) return;
+
+    if (tab !== configTabOverride) {
+      setTab(configTabOverride);
+    }
+
+    const configKey = `${activeTab}_initialConfig`;
+    const configJson = sessionStorage.getItem(configKey);
+    if (configJson) {
+      try {
+        const config = JSON.parse(configJson);
+        const updatedConfig = { ...config };
+        delete updatedConfig.analysisSubTab;
+        if (Object.keys(updatedConfig).length === 0) {
+          sessionStorage.removeItem(configKey);
+        } else {
+          sessionStorage.setItem(configKey, JSON.stringify(updatedConfig));
         }
+      } catch {
+        // Ignore parsing errors
       }
     }
-    // Only run once when activeTab changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+
+    // Allow the user to change tabs after applying the config once.
+    setConfigTabOverride(null);
+  }, [activeTab, configTabOverride, setTab, tab]);
 
   const [pos] = positionFromFen(currentNodeFen);
   const navigate = useNavigate();

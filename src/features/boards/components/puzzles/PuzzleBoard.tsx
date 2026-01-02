@@ -15,6 +15,7 @@ import { blindfold, chessboard } from "@/styles/Chessboard.css";
 import { uciNormalize } from "@/utils/chess";
 import { positionFromFen } from "@/utils/chessops";
 import { logger } from "@/utils/logger";
+import { recordPgnPuzzleSolved } from "@/utils/pgnPuzzleProgress";
 import { recordPuzzleSolved } from "@/utils/puzzleStreak";
 import type { Completion, Puzzle } from "@/utils/puzzles";
 import { PUZZLE_DEBUG_LOGS } from "@/utils/puzzles";
@@ -118,6 +119,9 @@ function PuzzleBoard({
         if (puzzle.completion === "incomplete") {
           changeCompletion("correct");
           recordPuzzleSolved();
+          if (puzzle.source?.type === "pgn") {
+            recordPgnPuzzleSolved(puzzle.source.path, puzzle.source.index);
+          }
         }
         setEnded(false);
 
@@ -151,14 +155,16 @@ function PuzzleBoard({
     reset();
   }
 
-  const { ref: parentRef, height: parentHeight } = useElementSize();
+  const { ref: parentRef, width: parentWidth, height: parentHeight } = useElementSize();
+  const maxBoardSize = Math.min(parentWidth || Infinity, parentHeight || Infinity);
 
   return (
-    <Box w="100%" h="100%" ref={parentRef}>
+    <Box w="100%" h="100%" ref={parentRef} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
       <Box
         className={`${chessboard} ${isBlindfold ? blindfold : ""}`}
         style={{
-          maxWidth: parentHeight,
+          maxWidth: maxBoardSize,
+          maxHeight: maxBoardSize,
         }}
       >
         <PromotionModal

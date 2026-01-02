@@ -1,4 +1,4 @@
--- Supabase table setup for Pawn Appétit telemetry
+﻿-- Supabase table setup for Obsidian Chess Studio telemetry
 
 -- Create the telemetry_events table
 CREATE TABLE IF NOT EXISTS telemetry_events (

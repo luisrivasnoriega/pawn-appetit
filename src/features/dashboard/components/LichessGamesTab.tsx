@@ -3,7 +3,7 @@ import { IconSortAscending, IconSortDescending, IconStar, IconStarFilled } from 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnalysisPreview } from "@/components/AnalysisPreview";
-import { getAnalyzedGame, getGameStats as getSavedGameStats } from "@/utils/analyzedGames";
+import { getAnalyzedGamesBulk, getGameStatsBulk } from "@/utils/analyzedGames";
 import type { FavoriteGame } from "@/utils/favoriteGames";
 
 interface LichessGame {
@@ -61,97 +61,24 @@ export function LichessGamesTab({
     // Trigger re-render when isLoading changes
   }, [isLoading]);
 
-  // Load analyzed PGNs for preview
+  // Load stats for games - use saved stats only (no calculation)
   useEffect(() => {
-    if (games.length === 0) return;
-
-    let cancelled = false;
-
-    const loadAnalyzedPgns = async () => {
-      const pgnMap = new Map<string, string>();
-
-      for (const game of games) {
-        if (cancelled) break;
-
-        try {
-          // Try to get analyzed PGN first (using ID as gameId for Lichess)
-          const analyzedPgn = await getAnalyzedGame(game.id);
-          if (analyzedPgn) {
-            pgnMap.set(game.id, analyzedPgn);
-          } else if (game.pgn) {
-            // Fallback to original PGN if no analysis available
-            pgnMap.set(game.id, game.pgn);
-          }
-        } catch {
-          // Silently skip games that fail to load
-        }
-
-        if (!cancelled) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-      }
-
-      if (!cancelled) {
-        setAnalyzedPgns(pgnMap);
-      }
-    };
-
-    const timeoutId = setTimeout(() => {
-      if (!cancelled) {
-        loadAnalyzedPgns().catch(() => {});
-      }
-    }, 100);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [games]);
-
-  // Load stats for games - use saved stats if available, otherwise calculate
-  useEffect(() => {
-    if (games.length === 0) return;
-
     let cancelled = false;
 
     const loadStats = async () => {
-      const statsMap = new Map<string, GameStats>();
-
-      for (const game of games) {
-        if (cancelled) break;
-        if (!game.pgn) continue;
-
-        try {
-          // Load saved stats only (no calculation)
-          const savedStats = await getSavedGameStats(game.id);
-
-          if (savedStats && savedStats.acpl > 0) {
-            statsMap.set(game.id, savedStats);
-          }
-        } catch {
-          // Silently skip games that fail to parse
-        }
-
-        if (!cancelled) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
+      if (games.length === 0) {
+        setGameStats(new Map());
+        return;
       }
-
-      // Only set state once at the end to avoid multiple re-renders
-      if (!cancelled) {
-        setGameStats(statsMap);
-      }
+      const ids = games.map((g) => g.id);
+      const stats = await getGameStatsBulk(ids);
+      if (!cancelled) setGameStats(stats);
     };
 
-    const timeoutId = setTimeout(() => {
-      if (!cancelled) {
-        loadStats().catch(() => {});
-      }
-    }, 100);
+    loadStats().catch(() => {});
 
     return () => {
       cancelled = true;
-      clearTimeout(timeoutId);
     };
   }, [games]); // Games array reference change is sufficient - no need to serialize PGNs
 
@@ -188,6 +115,41 @@ export function LichessGamesTab({
     const end = start + itemsPerPage;
     return sortedGames.slice(start, end);
   }, [games, page, itemsPerPage, sortBy, sortDirection, gameStats]);
+
+  // Load analyzed PGNs for preview (only for the visible page)
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAnalyzedPgns = async () => {
+      if (sortedAndPaginatedGames.length === 0) return;
+
+      const idsToLoad = sortedAndPaginatedGames.map((g) => g.id).filter((id) => !analyzedPgns.has(id));
+      if (idsToLoad.length === 0) return;
+
+      const analyzed = await getAnalyzedGamesBulk(idsToLoad);
+      if (cancelled) return;
+
+      setAnalyzedPgns((prev) => {
+        const next = new Map(prev);
+        for (const game of sortedAndPaginatedGames) {
+          if (next.has(game.id)) continue;
+          const analyzedPgn = analyzed.get(game.id);
+          if (analyzedPgn) {
+            next.set(game.id, analyzedPgn);
+          } else if (game.pgn) {
+            next.set(game.id, game.pgn);
+          }
+        }
+        return next;
+      });
+    };
+
+    loadAnalyzedPgns().catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sortedAndPaginatedGames, analyzedPgns]);
 
   // Calculate averages for footer
   const averages = useMemo(() => {

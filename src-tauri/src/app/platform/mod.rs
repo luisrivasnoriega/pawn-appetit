@@ -85,7 +85,7 @@ pub fn setup_tauri_plugins(
             tauri_plugin_log::Builder::new()
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("pawn-appetit".to_string()),
+                        file_name: Some("obsidian-chess-studio".to_string()),
                     }),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                 ])

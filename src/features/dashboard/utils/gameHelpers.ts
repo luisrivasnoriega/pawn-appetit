@@ -27,7 +27,7 @@ export function createLocalGameHeaders(game: GameRecord): GameHeaders {
   return {
     id: 0,
     event: "Local Game",
-    site: "Pawn Appetit",
+    site: "Obsidian Chess Studio",
     date: formatDateToPGN(game.timestamp) ?? "",
     white: game.white.name ?? (game.white.engine ? `Engine (${game.white.engine})` : "White"),
     black: game.black.name ?? (game.black.engine ? `Engine (${game.black.engine})` : "Black"),
@@ -76,7 +76,7 @@ export function createLichessGameHeaders(game: {
 export function createPGNFromMoves(moves: string[], result: string, initialFen?: string): string {
   // Build basic headers
   let pgn = `[Event "Local Game"]\n`;
-  pgn += `[Site "Pawn Appetit"]\n`;
+  pgn += `[Site "Obsidian Chess Studio"]\n`;
   pgn += `[Date "${new Date().toISOString().split("T")[0].replace(/-/g, ".")}"]\n`;
   pgn += `[Round "?"]\n`;
   pgn += `[White "?"]\n`;

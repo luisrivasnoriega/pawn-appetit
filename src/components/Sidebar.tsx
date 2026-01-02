@@ -1,8 +1,8 @@
-import { ActionIcon, AppShellSection, Divider, Group, Menu, Stack, Tooltip } from "@mantine/core";
+import { ActionIcon, AppShellSection, Group, Menu, Stack, Tooltip } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import {
   type Icon,
   IconChartLine,
-  IconChess,
   IconCpu,
   IconDatabase,
   IconFiles,
@@ -11,9 +11,9 @@ import {
   IconMenu2,
   IconPlayerPlay,
   IconPuzzle,
-  IconSchool,
   IconSettings,
   IconTrophy,
+  IconUpload,
   IconUsers,
 } from "@tabler/icons-react";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
@@ -21,14 +21,7 @@ import cx from "clsx";
 import { useAtom } from "jotai";
 import { useTranslation } from "react-i18next";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
-import {
-  activeTabAtom,
-  showAnalyzeInSidebarAtom,
-  showDashboardOnStartupAtom,
-  showPlayInSidebarAtom,
-  showPuzzlesInSidebarAtom,
-  tabsAtom,
-} from "@/state/atoms";
+import { activeTabAtom, tabsAtom } from "@/state/atoms";
 import { createTab } from "@/utils/tabs";
 import * as classes from "./Sidebar.css";
 
@@ -42,12 +35,13 @@ interface NavbarLinkProps {
 function NavbarLink({ url, icon: Icon, label }: NavbarLinkProps) {
   const matchesRoute = useMatchRoute();
   const { layout } = useResponsiveLayout();
+  const isActive = matchesRoute({ to: url, fuzzy: url !== "/" });
   return (
     <Tooltip label={label} position={layout.sidebar.position === "footer" ? "top" : "right"}>
       <Link
         to={url}
         className={cx(classes.link, {
-          [classes.active]: matchesRoute({ to: url, fuzzy: true }),
+          [classes.active]: isActive,
         })}
       >
         <Icon size={layout.sidebar.position === "footer" ? "2.0rem" : "1.5rem"} stroke={1.5} />
@@ -56,49 +50,35 @@ function NavbarLink({ url, icon: Icon, label }: NavbarLinkProps) {
   );
 }
 
-function QuickActionLink({
+function MayaActionLink({
   icon: Icon,
   label,
-  tabName,
-  tabType,
+  onClick,
 }: {
   icon: Icon;
   label: string;
-  tabName: string;
-  tabType: "play" | "analysis" | "puzzles";
+  onClick: (e?: React.MouseEvent) => void;
 }) {
-  const navigate = useNavigate();
   const { layout } = useResponsiveLayout();
-  const [, setTabs] = useAtom(tabsAtom);
-  const [, setActiveTab] = useAtom(activeTabAtom);
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    createTab({
-      tab: { name: tabName, type: tabType },
-      setTabs,
-      setActiveTab,
-      ...(tabType === "analysis" && {
-        initialAnalysisTab: "analysis",
-        initialAnalysisSubTab: "report",
-        initialNotationView: "report" as const,
-      }),
-    });
-    navigate({ to: "/boards" });
-  };
 
   return (
     <Tooltip label={label} position={layout.sidebar.position === "footer" ? "top" : "right"}>
-      <Link to="/boards" onClick={handleClick} className={cx(classes.link)}>
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onClick(e);
+        }}
+        className={cx(classes.link)}
+      >
         <Icon size={layout.sidebar.position === "footer" ? "2.0rem" : "1.5rem"} stroke={1.5} />
-      </Link>
+      </a>
     </Tooltip>
   );
 }
 
 export const linksdata = [
   { icon: IconLayoutDashboard, label: "dashboard", url: "/" },
-  { icon: IconChess, label: "board", url: "/boards" },
   { icon: IconCpu, label: "engines", url: "/engines" },
   {
     icon: IconDatabase,
@@ -108,68 +88,87 @@ export const linksdata = [
   { icon: IconFiles, label: "files", url: "/files" },
   { icon: IconUsers, label: "accounts", url: "/accounts" },
   { icon: IconTrophy, label: "tournaments", url: "/tournaments" },
-  { icon: IconSchool, label: "learn", url: "/learn" },
 ];
 
 export function SideBar() {
   const matchesRoute = useMatchRoute();
   const { t } = useTranslation();
-  const [showDashboardOnStartup] = useAtom(showDashboardOnStartupAtom);
-  const [showPlayInSidebar] = useAtom(showPlayInSidebarAtom);
-  const [showAnalyzeInSidebar] = useAtom(showAnalyzeInSidebarAtom);
-  const [showPuzzlesInSidebar] = useAtom(showPuzzlesInSidebarAtom);
+  const navigate = useNavigate();
+  const [, setTabs] = useAtom(tabsAtom);
+  const [, setActiveTab] = useAtom(activeTabAtom);
   const { layout } = useResponsiveLayout();
 
-  const mainLinks = linksdata
-    .filter((link) => {
-      if (!showDashboardOnStartup && link.url === "/") return false;
-      return link;
-    })
-    .map((link) => {
-      return <NavbarLink {...link} label={t(`features.sidebar.${link.label}`)} key={link.label} />;
-    });
+  const dashboardLinkData = linksdata.find((link) => link.url === "/")!;
+  const dashboardLink = (
+    <NavbarLink
+      key={dashboardLinkData.label}
+      {...dashboardLinkData}
+      label={t(`features.sidebar.${dashboardLinkData.label}`)}
+    />
+  );
 
-  // Create quick action links based on settings
-  const quickActionLinks: React.ReactNode[] = [];
-  if (showPlayInSidebar) {
-    quickActionLinks.push(
-      <QuickActionLink
-        key="quick-play"
-        icon={IconPlayerPlay}
-        label={t("features.sidebar.quickPlay")}
-        tabName="Play"
-        tabType="play"
-      />,
-    );
-  }
-  if (showAnalyzeInSidebar) {
-    quickActionLinks.push(
-      <QuickActionLink
-        key="quick-analyze"
-        icon={IconChartLine}
-        label={t("features.sidebar.quickAnalyze")}
-        tabName={t("features.tabs.analysisBoard.title")}
-        tabType="analysis"
-      />,
-    );
-  }
-  if (showPuzzlesInSidebar) {
-    quickActionLinks.push(
-      <QuickActionLink
-        key="quick-puzzles"
-        icon={IconPuzzle}
-        label={t("features.sidebar.quickPuzzles")}
-        tabName={t("features.tabs.puzzle.title")}
-        tabType="puzzles"
-      />,
-    );
-  }
+  const secondaryLinks = linksdata
+    .filter((link) => link.url !== "/")
+    .map((link) => <NavbarLink {...link} label={t(`features.sidebar.${link.label}`)} key={link.label} />);
 
-  const allMainLinks = [...mainLinks, ...quickActionLinks];
+  const actionLinks: React.ReactNode[] = [
+    <MayaActionLink
+      key="play"
+      icon={IconPlayerPlay}
+      label={t("maya.nav.playVsPc")}
+      onClick={() => {
+        createTab({
+          tab: { name: t("features.tabs.playBoard.title"), type: "play" },
+          setTabs,
+          setActiveTab,
+        });
+        navigate({ to: "/play" });
+      }}
+    />,
+    <MayaActionLink
+      key="analysis"
+      icon={IconChartLine}
+      label={t("maya.nav.analysis")}
+      onClick={() => {
+        createTab({
+          tab: { name: t("features.tabs.analysisBoard.title"), type: "analysis" },
+          setTabs,
+          setActiveTab,
+          initialAnalysisTab: "analysis",
+          initialAnalysisSubTab: "report",
+          initialNotationView: "report" as const,
+        });
+        navigate({ to: "/analysis" });
+      }}
+    />,
+    <MayaActionLink
+      key="puzzles"
+      icon={IconPuzzle}
+      label={t("maya.nav.puzzles")}
+      onClick={() => {
+        createTab({
+          tab: { name: t("features.tabs.puzzle.title"), type: "puzzles" },
+          setTabs,
+          setActiveTab,
+        });
+        navigate({ to: "/puzzles" });
+      }}
+    />,
+    <MayaActionLink
+      key="import"
+      icon={IconUpload}
+      label={t("maya.nav.importGame")}
+      onClick={() => {
+        navigate({ to: "/analysis" });
+        modals.openContextModal({ modal: "importModal", innerProps: {} });
+      }}
+    />,
+  ];
 
   if (layout.sidebar.position === "footer") {
     // Show only first 4 links on mobile
-    const visibleLinks = allMainLinks.slice(0, 4);
+    const footerLinks = [dashboardLink, ...actionLinks, ...secondaryLinks];
+    const visibleLinks = footerLinks.slice(0, 4);
 
     // For burger menu, we need to render Menu.Items directly
     const renderBurgerMenuItem = (link: React.ReactNode, index: number) => {
@@ -203,12 +202,11 @@ export function SideBar() {
         );
       }
 
-      // Regular navigation link
+      // Regular navigation link (use navigate() for reliability with Mantine Menu)
       return (
         <Menu.Item
           key={linkKey}
-          component={Link}
-          to={linkProps.url}
+          onClick={() => navigate({ to: linkProps.url! })}
           leftSection={<IconComponent size="1.2rem" stroke={1.5} />}
         >
           {linkProps.label}
@@ -229,11 +227,10 @@ export function SideBar() {
               </Tooltip>
             </Menu.Target>
             <Menu.Dropdown>
-              {allMainLinks.slice(4).map((link, index) => renderBurgerMenuItem(link, index))}
+              {footerLinks.slice(4).map((link, index) => renderBurgerMenuItem(link, index))}
               <Menu.Item
                 key="settings"
-                component={Link}
-                to="/settings"
+                onClick={() => navigate({ to: "/settings" })}
                 leftSection={<IconSettings size="1.2rem" stroke={1.5} />}
               >
                 {t("features.sidebar.settings")}
@@ -247,16 +244,13 @@ export function SideBar() {
 
   // Desktop layout
   return (
-    <>
-      <AppShellSection grow>
-        <Stack justify="center" gap={0}>
-          {mainLinks}
-          {!!quickActionLinks.length && <Divider />}
-          {quickActionLinks}
-        </Stack>
-      </AppShellSection>
-      <AppShellSection visibleFrom="sm">
-        <Stack justify="center" gap={0}>
+    <AppShellSection grow>
+      <Stack justify="flex-start" gap={0} pt="xs" h="100%">
+        {dashboardLink}
+        {layout.sidebar.position === "navbar" && actionLinks}
+        {secondaryLinks}
+
+        <Stack justify="flex-end" gap={0} mt="auto" visibleFrom="sm">
           <Tooltip label={t("features.sidebar.keyboardShortcuts")} position="right">
             <Link
               to="/settings/keyboard-shortcuts"
@@ -271,14 +265,14 @@ export function SideBar() {
             <Link
               to="/settings"
               className={cx(classes.link, {
-                [classes.active]: matchesRoute({ to: "/settings" }),
+                [classes.active]: matchesRoute({ to: "/settings", fuzzy: true }),
               })}
             >
               <IconSettings size="1.5rem" stroke={1.5} />
             </Link>
           </Tooltip>
         </Stack>
-      </AppShellSection>
-    </>
+      </Stack>
+    </AppShellSection>
   );
 }

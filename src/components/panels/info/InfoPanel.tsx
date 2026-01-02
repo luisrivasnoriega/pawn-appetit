@@ -1,11 +1,12 @@
 import { Accordion, Box, Group, ScrollArea, Stack, Text } from "@mantine/core";
 import { useHotkeys } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
-import { useLoaderData } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
+import { loadDirectories } from "@/App";
 import { commands } from "@/bindings";
 import GameInfo from "@/components/GameInfo";
 import { TreeStateContext } from "@/components/TreeStateContext";
@@ -87,7 +88,8 @@ function GameSelectorAccordion({
   const [currentTab, setCurrentTab] = useAtom(currentTabAtom);
   const setMissingMoves = useSetAtom(missingMovesAtom);
   const [tempPage, setTempPage] = useState(0);
-  const { documentDir } = useLoaderData({ from: "/boards" });
+  const { data: dirs } = useQuery({ queryKey: ["dirs"], queryFn: loadDirectories, staleTime: Infinity });
+  const documentDir = dirs?.documentDir ?? null;
   const keyMap = useAtomValue(keyMapAtom);
 
   const gameNumber = currentTab?.gameNumber || 0;
@@ -107,6 +109,9 @@ function GameSelectorAccordion({
         },
         onConfirm: async () => {
           if (currentTab) {
+            if (!documentDir) {
+              return;
+            }
             saveToFile({
               dir: documentDir,
               setCurrentTab,

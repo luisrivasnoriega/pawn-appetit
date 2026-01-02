@@ -1,7 +1,7 @@
 import { Box, Button, Card, Group, Progress, ScrollArea, Select, Stack, Tabs, Text, TextInput, Title, useDirection } from "@mantine/core";
 
 import { notifications } from "@mantine/notifications";
-import { IconBook, IconBrush, IconChess, IconFlag, IconFolder, IconMouse, IconVolume } from "@tabler/icons-react";
+import { IconBook, IconBrush, IconChess, IconFolder, IconMouse, IconVolume } from "@tabler/icons-react";
 import { useLoaderData } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAtom, useAtomValue } from "jotai";
@@ -20,24 +20,18 @@ import {
   blindfoldAtom,
   enableBoardScrollAtom,
   eraseDrawablesOnClickAtom,
-  forcedEnPassantAtom,
   minimumGamesAtom,
   moveInputAtom,
   moveMethodAtom,
   moveNotationTypeAtom,
-  nativeBarAtom,
   type PracticeAnimationSpeed,
   percentageCoverageAtom,
   practiceAnimationSpeedAtom,
   previewBoardOnHoverAtom,
-  showAnalyzeInSidebarAtom,
   showArrowsAtom,
   showConsecutiveArrowsAtom,
   showCoordinatesAtom,
-  showDashboardOnStartupAtom,
   showDestsAtom,
-  showPlayInSidebarAtom,
-  showPuzzlesInSidebarAtom,
   snapArrowsAtom,
   spellCheckAtom,
   storedDocumentDirAtom,
@@ -52,7 +46,6 @@ import PiecesSelect from "./components/PiecesSelect";
 import SettingsNumberInput from "./components/SettingsNumberInput";
 import SettingsSwitch from "./components/SettingsSwitch";
 import SoundSelect from "./components/SoundSelect";
-import TelemetrySettings from "./components/TelemetrySettings";
 import VolumeSlider from "./components/VolumeSlider";
 import * as classes from "./SettingsPage.css";
 
@@ -70,8 +63,6 @@ export default function Page() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("board");
   const { layout } = useResponsiveLayout();
-
-  const [isNative, setIsNative] = useAtom(nativeBarAtom);
   const {
     dirs: { documentDir },
   } = useLoaderData({ from: "/settings" });
@@ -227,8 +218,6 @@ export default function Page() {
     ],
     [t],
   );
-
-  const titleBarData = useMemo(() => [t("settings.appearance.native"), t("settings.appearance.custom")], [t]);
 
   const allSettings = useMemo(
     (): SettingItem[] => [
@@ -508,23 +497,6 @@ export default function Page() {
         ),
       },
       {
-        id: "forced-en-passant",
-        title: t("settings.anarchy.forcedEnPassant"),
-        description: t("settings.anarchy.forcedEnPassantDesc"),
-        tab: "anarchy",
-        component: (
-          <Group justify="space-between" wrap="nowrap" gap="xl" className={classes.item}>
-            <div>
-              <Text>{t("settings.anarchy.forcedEnPassant")}</Text>
-              <Text size="xs" c="dimmed">
-                {t("settings.anarchy.forcedEnPassantDesc")}
-              </Text>
-            </div>
-            <SettingsSwitch atom={forcedEnPassantAtom} />
-          </Group>
-        ),
-      },
-      {
         id: "percent-coverage",
         title: t("settings.openingReport.percentCoverage"),
         description: t("settings.openingReport.percentCoverageDesc"),
@@ -681,98 +653,6 @@ export default function Page() {
                 }
               }}
             />
-          </Group>
-        ),
-      },
-      {
-        id: "title-bar",
-        title: t("settings.appearance.titleBar"),
-        description: t("settings.appearance.titleBarDesc"),
-        tab: "appearance",
-        component: (
-          <Group justify="space-between" wrap="nowrap" gap="xl" className={classes.item}>
-            <div>
-              <Text>{t("settings.appearance.titleBar")}</Text>
-              <Text size="xs" c="dimmed">
-                {t("settings.appearance.titleBarDesc")}
-              </Text>
-            </div>
-            <Select
-              allowDeselect={false}
-              data={titleBarData}
-              value={isNative ? t("settings.appearance.native") : t("settings.appearance.custom")}
-              onChange={(val) => {
-                setIsNative(val === t("settings.appearance.native"));
-              }}
-            />
-          </Group>
-        ),
-      },
-      {
-        id: "hide-dashboard",
-        title: t("settings.appearance.showDashboardOnStartup"),
-        description: t("settings.appearance.showDashboardOnStartupDesc"),
-        tab: "appearance",
-        component: (
-          <Group justify="space-between" wrap="nowrap" gap="xl" className={classes.item}>
-            <div>
-              <Text>{t("settings.appearance.showDashboardOnStartup")}</Text>
-              <Text size="xs" c="dimmed">
-                {t("settings.appearance.showDashboardOnStartupDesc")}
-              </Text>
-            </div>
-            <SettingsSwitch atom={showDashboardOnStartupAtom} />
-          </Group>
-        ),
-      },
-      {
-        id: "show-play-sidebar",
-        title: t("settings.appearance.showPlayInSidebar"),
-        description: t("settings.appearance.showPlayInSidebarDesc"),
-        tab: "appearance",
-        component: (
-          <Group justify="space-between" wrap="nowrap" gap="xl" className={classes.item}>
-            <div>
-              <Text>{t("settings.appearance.showPlayInSidebar")}</Text>
-              <Text size="xs" c="dimmed">
-                {t("settings.appearance.showPlayInSidebarDesc")}
-              </Text>
-            </div>
-            <SettingsSwitch atom={showPlayInSidebarAtom} />
-          </Group>
-        ),
-      },
-      {
-        id: "show-analyze-sidebar",
-        title: t("settings.appearance.showAnalyzeInSidebar"),
-        description: t("settings.appearance.showAnalyzeInSidebarDesc"),
-        tab: "appearance",
-        component: (
-          <Group justify="space-between" wrap="nowrap" gap="xl" className={classes.item}>
-            <div>
-              <Text>{t("settings.appearance.showAnalyzeInSidebar")}</Text>
-              <Text size="xs" c="dimmed">
-                {t("settings.appearance.showAnalyzeInSidebarDesc")}
-              </Text>
-            </div>
-            <SettingsSwitch atom={showAnalyzeInSidebarAtom} />
-          </Group>
-        ),
-      },
-      {
-        id: "show-puzzles-sidebar",
-        title: t("settings.appearance.showPuzzlesInSidebar"),
-        description: t("settings.appearance.showPuzzlesInSidebarDesc"),
-        tab: "appearance",
-        component: (
-          <Group justify="space-between" wrap="nowrap" gap="xl" className={classes.item}>
-            <div>
-              <Text>{t("settings.appearance.showPuzzlesInSidebar")}</Text>
-              <Text size="xs" c="dimmed">
-                {t("settings.appearance.showPuzzlesInSidebarDesc")}
-              </Text>
-            </div>
-            <SettingsSwitch atom={showPuzzlesInSidebarAtom} />
           </Group>
         ),
       },
@@ -950,13 +830,6 @@ export default function Page() {
           </Stack>
         ),
       },
-      {
-        id: "telemetry",
-        title: t("settings.telemetry"),
-        description: t("settings.telemetryDesc"),
-        tab: "directories",
-        component: <TelemetrySettings className={classes.item} />,
-      },
     ],
     [
       t,
@@ -964,8 +837,6 @@ export default function Page() {
       i18n.changeLanguage,
       i18n.dir,
       setDirection,
-      isNative,
-      setIsNative,
       moveMethod,
       setMoveMethod,
       validatedMoveNotationType,
@@ -987,7 +858,6 @@ export default function Page() {
       practiceAnimationSpeed,
       practiceAnimationSpeedData,
       setPracticeAnimationSpeed,
-      titleBarData,
     ],
   );
 
@@ -1028,7 +898,6 @@ export default function Page() {
   const tabInfo = {
     board: { title: t("settings.board.title"), desc: t("settings.board.desc") },
     inputs: { title: t("settings.inputs.title"), desc: t("settings.inputs.desc") },
-    anarchy: { title: t("settings.anarchy.title"), desc: t("settings.anarchy.desc") },
     report: { title: t("settings.openingReport.title"), desc: t("settings.openingReport.desc") },
     appearance: { title: t("settings.appearance.title"), desc: t("settings.appearance.desc") },
     sound: { title: t("settings.sound.title"), desc: t("settings.sound.desc") },
@@ -1043,7 +912,6 @@ export default function Page() {
       header: t("settings.gameplay"),
     },
     { value: "inputs", icon: <IconMouse size="1rem" />, label: t("settings.inputs.title") },
-    { value: "anarchy", icon: <IconFlag size="1rem" />, label: t("settings.anarchy.title") },
     {
       value: "report",
       icon: <IconBook size="1rem" />,

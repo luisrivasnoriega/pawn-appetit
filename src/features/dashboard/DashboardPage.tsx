@@ -6,21 +6,16 @@ import { IconBolt, IconChess, IconClock, IconStopwatch } from "@tabler/icons-rea
 import { useNavigate } from "@tanstack/react-router";
 import { appDataDir, resolve } from "@tauri-apps/api/path";
 import { mkdir, writeTextFile } from "@tauri-apps/plugin-fs";
-import { info } from "@tauri-apps/plugin-log";
 import { useAtom, useAtomValue } from "jotai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { commands, type GoMode } from "@/bindings";
-import { lessons } from "@/features/learn/constants/lessons";
-import { practices } from "@/features/learn/constants/practices";
 import { activeTabAtom, enginesAtom, sessionsAtom, tabsAtom } from "@/state/atoms";
-import { useUserStatsStore } from "@/state/userStatsStore";
-import { type Achievement, getAchievements } from "@/utils/achievements";
 import { getAllAnalyzedGames, getAnalyzedGame, saveAnalyzedGame, saveGameStats } from "@/utils/analyzedGames";
 import { getGameStats, getMainLine, getPGN, parsePGN } from "@/utils/chess";
 import type { ChessComGame } from "@/utils/chess.com/api";
+import { downloadChessCom, getChessComAccount } from "@/utils/chess.com/api";
 import { getAllFavoriteGames, isFavoriteGame, removeFavoriteGame, saveFavoriteGame, type FavoriteGame } from "@/utils/favoriteGames";
-import { type DailyGoal, getDailyGoals } from "@/utils/dailyGoals";
 import { getDatabases, query_games } from "@/utils/db";
 import { calculateEstimatedElo } from "@/utils/eloEstimation";
 import type { LocalEngine } from "@/utils/engines";
@@ -48,17 +43,17 @@ import {
   saveMainAccount,
   updateMainAccountFideId,
 } from "@/utils/mainAccount";
-import { getPuzzleStats, getTodayPuzzleCount } from "@/utils/puzzleStreak";
+import { getPuzzleStats } from "@/utils/puzzleStreak";
 import { createTab, genID, type Tab } from "@/utils/tabs";
 import type { TreeState } from "@/utils/treeReducer";
 import { unwrap } from "@/utils/unwrap";
+import { downloadLichess, getLichessAccount } from "@/utils/lichess/api";
 import { type AnalyzeAllConfig, AnalyzeAllModal } from "./components/AnalyzeAllModal";
 import { PlayerStatsModal } from "./components/PlayerStatsModal";
-import { DailyGoalsCard } from "./components/DailyGoalsCard";
 import { GamesHistoryCard } from "./components/GamesHistoryCard";
 import { PuzzleStatsCard } from "./components/PuzzleStatsCard";
+import { PuzzleVariantsCard } from "./components/PuzzleVariantsCard";
 import { QuickActionsGrid } from "./components/QuickActionsGrid";
-import { type Suggestion, SuggestionsCard } from "./components/SuggestionsCard";
 import { UserProfileCard } from "./components/UserProfileCard";
 import { WelcomeCard } from "./components/WelcomeCard";
 import { calculateOnlineRating } from "./utils/calculateOnlineRating";
@@ -75,11 +70,18 @@ import {
 export default function DashboardPage() {
   const [isFirstOpen, setIsFirstOpen] = useState(false);
   useEffect(() => {
-    const key = "pawn-appetit.firstOpen";
-    if (!localStorage.getItem(key)) {
+    const key = "obsidian-chess-studio.firstOpen";
+    const legacyKey = "pawn-appetit.firstOpen";
+
+    const hasSeen = localStorage.getItem(key) ?? localStorage.getItem(legacyKey);
+    if (!hasSeen) {
       localStorage.setItem(key, "true");
       setIsFirstOpen(true);
     } else {
+      // Migrate legacy key so we don't keep checking it forever
+      if (!localStorage.getItem(key) && localStorage.getItem(legacyKey)) {
+        localStorage.setItem(key, "true");
+      }
       setIsFirstOpen(false);
     }
   }, []);
@@ -89,10 +91,127 @@ export default function DashboardPage() {
   const [_tabs, setTabs] = useAtom(tabsAtom);
   const [_activeTab, setActiveTab] = useAtom(activeTabAtom);
 
-  const sessions = useAtomValue(sessionsAtom);
+  const [sessions, setSessions] = useAtom(sessionsAtom);
   const engines = useAtomValue(enginesAtom);
   const localEngines = engines.filter((e): e is LocalEngine => e.type === "local");
   const defaultEngine = localEngines.length > 0 ? localEngines[0] : null;
+
+  const hasAutoSyncedAccountsRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoSyncedAccountsRef.current) return;
+    if (sessions.length === 0) return;
+    hasAutoSyncedAccountsRef.current = true;
+
+    const run = async () => {
+      try {
+        const dbDir = await resolve(await appDataDir(), "db");
+        await mkdir(dbDir, { recursive: true });
+      } catch {
+        // Best-effort; downloads/conversion will surface errors if this fails.
+      }
+
+      const getDbSyncState = async (dbFile: string): Promise<{ lastGameDate: number | null; count: number }> => {
+        try {
+          const games = await query_games(dbFile, {
+            options: {
+              page: 1,
+              pageSize: 1,
+              sort: "date",
+              direction: "desc",
+              skipCount: false,
+            },
+          });
+          const count = games.count ?? 0;
+          if (count > 0 && games.data[0]?.date && games.data[0]?.time) {
+            const [year, month, day] = games.data[0].date.split(".").map(Number);
+            const [hour, minute, second] = games.data[0].time.split(":").map(Number);
+            const d = Date.UTC(year, month - 1, day, hour, minute, second);
+            return { lastGameDate: d, count };
+          }
+          return { lastGameDate: null, count };
+        } catch {
+          return { lastGameDate: null, count: 0 };
+        }
+      };
+
+      for (const session of sessions) {
+        if (session.lichess) {
+          try {
+            const username = session.lichess.username;
+            const token = session.lichess.accessToken;
+
+            const updatedAccount = await getLichessAccount({ token, username });
+            if (updatedAccount) {
+              setSessions((prev) =>
+                prev.map((s) =>
+                  s.lichess?.username === username
+                    ? { ...s, updatedAt: Date.now(), lichess: { ...s.lichess, account: updatedAccount } }
+                    : s,
+                ),
+              );
+            }
+
+            const dbPath = await resolve(await appDataDir(), "db", `${username}_lichess.db3`);
+            const { lastGameDate, count } = await getDbSyncState(dbPath);
+            const totalGames = updatedAccount?.count?.all ?? session.lichess.account.count?.all ?? 0;
+            const gamesToDownload = Math.max(0, totalGames - count);
+
+            await downloadLichess(username, lastGameDate, gamesToDownload, () => {}, token);
+
+            const pgnPath = await resolve(await appDataDir(), "db", `${username}_lichess.pgn`);
+            unwrap(
+              await commands.convertPgn(
+                pgnPath,
+                dbPath,
+                lastGameDate ? lastGameDate / 1000 : null,
+                `${username} Lichess`,
+                null,
+              ),
+            );
+          } catch {
+            // Best-effort: keep processing other accounts.
+          }
+        }
+
+        if (session.chessCom) {
+          try {
+            const username = session.chessCom.username;
+
+            const updatedStats = await getChessComAccount(username);
+            if (updatedStats) {
+              setSessions((prev) =>
+                prev.map((s) =>
+                  s.chessCom?.username === username
+                    ? { ...s, updatedAt: Date.now(), chessCom: { ...s.chessCom, stats: updatedStats } }
+                    : s,
+                ),
+              );
+            }
+
+            const dbPath = await resolve(await appDataDir(), "db", `${username}_chesscom.db3`);
+            const { lastGameDate } = await getDbSyncState(dbPath);
+
+            await downloadChessCom(username, lastGameDate);
+
+            const pgnPath = await resolve(await appDataDir(), "db", `${username}_chesscom.pgn`);
+            unwrap(
+              await commands.convertPgn(
+                pgnPath,
+                dbPath,
+                lastGameDate ? lastGameDate / 1000 : null,
+                `${username} Chess.com`,
+                null,
+              ),
+            );
+          } catch {
+            // Best-effort: keep processing other accounts.
+          }
+        }
+      }
+    };
+
+    void run();
+  }, [sessions, setSessions]);
 
   const [mainAccountName, setMainAccountName] = useState<string | null>(null);
   const [activeGamesTab, setActiveGamesTab] = useState<string | null>("local");
@@ -141,7 +260,8 @@ export default function DashboardPage() {
           setDisplayName(accountDisplayName);
         } else {
           // Fallback to localStorage for backward compatibility
-          const storedDisplayName = localStorage.getItem("pawn-appetit.displayName");
+          const storedDisplayName =
+            localStorage.getItem("obsidian-chess-studio.displayName") ?? localStorage.getItem("pawn-appetit.displayName");
           if (storedDisplayName !== null) {
             setDisplayName(storedDisplayName);
           } else {
@@ -221,7 +341,8 @@ export default function DashboardPage() {
           if (accountDisplayName) {
             setDisplayName(accountDisplayName);
           } else {
-            const storedDisplayName = localStorage.getItem("pawn-appetit.displayName");
+            const storedDisplayName =
+              localStorage.getItem("obsidian-chess-studio.displayName") ?? localStorage.getItem("pawn-appetit.displayName");
             if (storedDisplayName !== null) {
               setDisplayName(storedDisplayName);
             } else {
@@ -746,145 +867,6 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const userStats = useUserStatsStore((s) => s.userStats);
-
-  const suggestions: Suggestion[] = (() => {
-    const picked: Suggestion[] = [];
-
-    try {
-      const nextLesson = lessons.find((l) => {
-        const done = userStats.completedExercises?.[l.id]?.length ?? 0;
-        return (l.exercises?.length ?? 0) > 0 && done < (l.exercises?.length ?? 0);
-      });
-      if (nextLesson) {
-        picked.push({
-          id: `lesson:${nextLesson.id}`,
-          title: `${t("common.continue")}: ${nextLesson.title.default}`,
-          tag: "Lessons",
-          difficulty: nextLesson.difficulty?.toString?.().replace(/^./, (c) => c.toUpperCase()) ?? "All",
-          to: "/learn/lessons",
-        });
-      }
-    } catch {}
-
-    try {
-      const withExercises = practices.filter((c) => (c.exercises?.length ?? 0) > 0);
-      const scored = withExercises
-        .map((c) => {
-          const done = userStats.completedPractice?.[c.id]?.length ?? 0;
-          const total = c.exercises?.length ?? 0;
-          return { c, ratio: total ? done / total : 1, total, done };
-        })
-        .sort((a, b) => a.ratio - b.ratio || a.total - b.total);
-      const target = scored[0]?.c;
-      if (target) {
-        const group = target.group ?? "";
-        const tag: Suggestion["tag"] = /Endgames/i.test(group)
-          ? "Endgames"
-          : /Checkmates|Tactics/i.test(group)
-            ? "Tactics"
-            : "Lessons";
-        picked.push({
-          id: `practice:${target.id}`,
-          title: `Practice: ${target.title}`,
-          tag,
-          difficulty: "All",
-          to: "/learn/practice",
-        });
-      }
-    } catch {}
-
-    try {
-      const today = getTodayPuzzleCount();
-      if (today < 5) {
-        picked.push({
-          id: `puzzles:streak`,
-          title: today === 0 ? t("features.dashboard.startPuzzleStreak") : t("features.dashboard.keepStreak"),
-          tag: "Tactics",
-          difficulty: "All",
-          to: "/learn/practice",
-        });
-      }
-    } catch {}
-
-    try {
-      const last: GameRecord | undefined = recentGames?.[0];
-      if (last) {
-        const isUserWhite = last.white.type === "human";
-        const userLost = (isUserWhite && last.result === "0-1") || (!isUserWhite && last.result === "1-0");
-        if (userLost) {
-          picked.push({
-            id: `analyze:${last.id}`,
-            title: t("dashboard.suggestions.analyzeLastGame"),
-            tag: "Lessons",
-            difficulty: "All",
-            onClick: () => {
-              const headers = createLocalGameHeaders(last);
-              // Use saved PGN if available, otherwise reconstruct from moves with initial FEN
-              const pgn = last.pgn || createPGNFromMoves(last.moves, last.result, last.initialFen);
-
-              createTab({
-                tab: {
-                  name: `${headers.white} - ${headers.black}`,
-                  type: "analysis",
-                },
-                setTabs,
-                setActiveTab,
-                pgn,
-                headers,
-                initialAnalysisTab: "analysis",
-                initialAnalysisSubTab: "report",
-                initialNotationView: "report",
-              });
-              navigate({ to: "/boards" });
-            },
-          });
-        }
-      }
-    } catch {}
-
-    while (picked.length < 3) {
-      const fallbackId = `fallback:${picked.length}`;
-      picked.push({
-        id: fallbackId,
-        title: t("dashboard.suggestions.exploreOpenings"),
-        tag: "Openings",
-        difficulty: "All",
-        to: "/learn/practice",
-      });
-    }
-
-    return picked.slice(0, 3);
-  })();
-  const [goals, setGoals] = useState<DailyGoal[]>([]);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      const g = await getDailyGoals();
-      const a = await getAchievements();
-      if (mounted) {
-        setGoals(g);
-        setAchievements(a);
-      }
-    };
-    load();
-    const update = () => load();
-    window.addEventListener("storage", update);
-    window.addEventListener("focus", update);
-    window.addEventListener("puzzles:updated", update);
-    window.addEventListener("games:updated", update);
-    const unsubscribe = useUserStatsStore.subscribe(() => update());
-    return () => {
-      mounted = false;
-      window.removeEventListener("storage", update);
-      window.removeEventListener("focus", update);
-      window.removeEventListener("puzzles:updated", update);
-      window.removeEventListener("games:updated", update);
-      unsubscribe();
-    };
-  }, []);
-
   const PLAY_CHESS = {
     icon: <IconChess size={50} />,
     title: t("features.dashboard.cards.playChess.title"),
@@ -903,7 +885,7 @@ export default function DashboardPage() {
         ];
       });
       setActiveTab(uuid);
-      navigate({ to: "/boards" });
+      navigate({ to: "/play" });
     },
   };
 
@@ -937,7 +919,7 @@ export default function DashboardPage() {
           ];
         });
         setActiveTab(uuid);
-        navigate({ to: "/boards" });
+        navigate({ to: "/play" });
       },
       color: "blue.6",
     },
@@ -964,7 +946,7 @@ export default function DashboardPage() {
           ];
         });
         setActiveTab(uuid);
-        navigate({ to: "/boards" });
+        navigate({ to: "/play" });
       },
       color: "teal.6",
     },
@@ -991,7 +973,7 @@ export default function DashboardPage() {
           ];
         });
         setActiveTab(uuid);
-        navigate({ to: "/boards" });
+        navigate({ to: "/play" });
       },
       color: "yellow.6",
     },
@@ -1018,7 +1000,7 @@ export default function DashboardPage() {
           ];
         });
         setActiveTab(uuid);
-        navigate({ to: "/boards" });
+        navigate({ to: "/play" });
       },
       color: "blue.6",
     },
@@ -1030,7 +1012,7 @@ export default function DashboardPage() {
         isFirstOpen={isFirstOpen}
         onPlayChess={PLAY_CHESS.onClick}
         onImportGame={() => {
-          navigate({ to: "/boards" });
+          navigate({ to: "/analysis" });
           modals.openContextModal({
             modal: "importModal",
             innerProps: {},
@@ -1057,6 +1039,7 @@ export default function DashboardPage() {
                 // Save display name for this account
                 await saveAccountDisplayName(mainAccountName, newDisplayName);
                 // Also save to localStorage for backward compatibility
+                localStorage.setItem("obsidian-chess-studio.displayName", newDisplayName);
                 localStorage.setItem("pawn-appetit.displayName", newDisplayName);
               }
 
@@ -1132,7 +1115,7 @@ export default function DashboardPage() {
       </Grid>
 
       <Grid>
-        <Grid.Col span={{ base: 12, sm: 12, md: 7, lg: 7, xl: 7 }}>
+        <Grid.Col span={12}>
           <GamesHistoryCard
             activeTab={activeGamesTab}
             onTabChange={setActiveGamesTab}
@@ -1174,11 +1157,10 @@ export default function DashboardPage() {
                 initialNotationView: "report",
               }).then((tabId) => {
                 // Store the gameId in sessionStorage so we can update it when analysis completes
-                if (tabId && typeof window !== "undefined") {
-                  sessionStorage.setItem(`${tabId}_localGameId`, game.id);
-                }
-              });
-              navigate({ to: "/boards" });
+                 if (tabId && typeof window !== "undefined") {
+                   sessionStorage.setItem(`${tabId}_localGameId`, game.id);
+                 }
+               });
             }}
             onAnalyzeChessComGame={(game) => {
               if (game.pgn) {
@@ -1208,12 +1190,11 @@ export default function DashboardPage() {
                   initialNotationView: "report",
                 }).then((tabId) => {
                   // Store the game URL and username in sessionStorage so we can save the analyzed PGN when analysis completes
-                  if (tabId && typeof window !== "undefined") {
-                    sessionStorage.setItem(`${tabId}_chessComGameUrl`, game.url);
-                    sessionStorage.setItem(`${tabId}_chessComUsername`, accountUsername);
-                  }
-                });
-                navigate({ to: "/boards" });
+                   if (tabId && typeof window !== "undefined") {
+                     sessionStorage.setItem(`${tabId}_chessComGameUrl`, game.url);
+                     sessionStorage.setItem(`${tabId}_chessComUsername`, accountUsername);
+                   }
+                 });
               }
             }}
             onAnalyzeLichessGame={(game) => {
@@ -1246,12 +1227,11 @@ export default function DashboardPage() {
                   initialNotationView: "report",
                 }).then((tabId) => {
                   // Store the game ID and username in sessionStorage so we can save the analyzed PGN when analysis completes
-                  if (tabId && typeof window !== "undefined") {
-                    sessionStorage.setItem(`${tabId}_lichessGameId`, game.id);
-                    sessionStorage.setItem(`${tabId}_lichessUsername`, accountUsername);
-                  }
-                });
-                navigate({ to: "/boards" });
+                   if (tabId && typeof window !== "undefined") {
+                     sessionStorage.setItem(`${tabId}_lichessGameId`, game.id);
+                     sessionStorage.setItem(`${tabId}_lichessUsername`, accountUsername);
+                   }
+                 });
               }
             }}
             onAnalyzeAllLocal={async () => {
@@ -1464,8 +1444,10 @@ export default function DashboardPage() {
             }
           />
         </Grid.Col>
+      </Grid>
 
-        <Grid.Col span={{ base: 12, sm: 12, md: 5, lg: 5, xl: 5 }}>
+      <Grid>
+        <Grid.Col span={{ base: 12, md: 6 }}>
           <PuzzleStatsCard
             stats={puzzleStats}
             onStartPuzzles={() => {
@@ -1474,26 +1456,12 @@ export default function DashboardPage() {
                 setTabs,
                 setActiveTab,
               });
-              navigate({ to: "/boards" });
+              navigate({ to: "/puzzles" });
             }}
           />
         </Grid.Col>
-      </Grid>
-
-      <Grid>
-        <Grid.Col span={{ base: 12, sm: 12, md: 7, lg: 7, xl: 7 }}>
-          <SuggestionsCard
-            suggestions={suggestions}
-            onSuggestionClick={(s) => {
-              if (s.onClick) s.onClick();
-              else if (s.to) navigate({ to: s.to });
-              else navigate({ to: "/learn" });
-            }}
-          />
-        </Grid.Col>
-
-        <Grid.Col span={{ base: 12, sm: 12, md: 5, lg: 5, xl: 5 }}>
-          <DailyGoalsCard goals={goals} achievements={achievements} currentStreak={puzzleStats.currentStreak} />
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <PuzzleVariantsCard />
         </Grid.Col>
       </Grid>
 
@@ -1777,7 +1745,6 @@ export default function DashboardPage() {
 
               // Validate and fix PGN before saving
               if (!analyzedPgn || analyzedPgn.trim().length === 0) {
-                info(`Generated PGN is empty for game ${index + 1}, skipping save`);
                 activeAnalysisIds.delete(analysisId);
                 return;
               }
@@ -1939,7 +1906,6 @@ export default function DashboardPage() {
                 successCount++;
               }
             } catch (error) {
-              info(`Failed to analyze game ${index + 1}: ${error}`);
               failCount++;
             } finally {
               activeAnalysisIds.delete(analysisId);

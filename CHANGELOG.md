@@ -1,4 +1,4 @@
-# Pawn Appétit Changelog
+﻿# Obsidian Chess Studio Changelog
 
 ## [0.10.0]
 
@@ -427,3 +427,4 @@
 - Fixed hotkeys and tab navigation on board
 - Fixed percentage calculation in AccountCard for zero games
 - Fixed remembered report generation form state
+

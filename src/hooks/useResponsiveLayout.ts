@@ -1,9 +1,7 @@
 import type { AppShellProps } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { type } from "@tauri-apps/plugin-os";
-import { useAtomValue } from "jotai";
 import { useMemo } from "react";
-import { nativeBarAtom } from "@/state/atoms";
 import { vars } from "@/styles/theme";
 
 // Platform types
@@ -95,7 +93,6 @@ export const useResponsiveLayout: () => {
   performanceMetrics: PerformanceMetrics;
 } = () => {
   const platform = getPlatform();
-  const isNative = useAtomValue(nativeBarAtom);
   const smallScreenMax = useMediaQuery(`(width < ${vars.breakpoints.sm})`);
   const largeScreenMax = useMediaQuery(`(width < ${vars.breakpoints.lg})`);
   const extraLargeScreenMax = useMediaQuery(`(width < ${vars.breakpoints.xl})`);
@@ -111,7 +108,7 @@ export const useResponsiveLayout: () => {
     const isMobile = isMobileOS;
     const isMobileOrSmallScreen = isMobileOS || smallScreenMax;
 
-    const menuBarMode: MenuBarMode = isMobile ? "disabled" : isNative ? "native" : "custom";
+    const menuBarMode: MenuBarMode = isMobile ? "disabled" : "custom";
     const sideBarPosition: SideBarPosition = isMobileOrSmallScreen ? "footer" : "navbar";
     const panelsType: PanelsType = isMobile || useDrawerOnDesktop ? "drawer" : "sidepanel";
     const drawerPosition: DrawerPosition = "bottom";
@@ -132,7 +129,7 @@ export const useResponsiveLayout: () => {
     const isNavbarCollapsed = sideBarPosition !== "navbar";
 
     // Layout dimensions
-    const headerHeight = isHeaderCollapsed ? "0rem" : "2.3rem";
+    const headerHeight = isHeaderCollapsed ? "0rem" : !isMobile ? "2.6rem" : "2.3rem";
     const navbarWidth = isNavbarCollapsed ? "0rem" : "3rem";
     const footerHeight = isFooterCollapsed ? "0rem" : isMobile ? "4rem" : "3rem";
     const marginTop = isMobile ? "3rem" : "0rem";
@@ -148,7 +145,7 @@ export const useResponsiveLayout: () => {
       // App shell configuration
       menuBar: {
         mode: menuBarMode,
-        displayWindowControls: !isNative && !isMobile,
+        displayWindowControls: !isMobile,
       },
       sidebar: {
         position: sideBarPosition,
@@ -228,5 +225,5 @@ export const useResponsiveLayout: () => {
       mainContentHeight,
       performanceMetrics,
     };
-  }, [platform, isNative, smallScreenMax, extraLargeScreenMax, largeScreenMax]);
+  }, [platform, smallScreenMax, extraLargeScreenMax, largeScreenMax]);
 };

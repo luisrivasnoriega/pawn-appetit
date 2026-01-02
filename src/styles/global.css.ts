@@ -7,8 +7,21 @@ globalStyle("*", {
 });
 
 globalStyle("html, body", {
+  height: "100%",
+  width: "100%",
+  margin: 0,
   overscrollBehavior: "none",
-  overflow: "auto",
+  overflow: "hidden",
+});
+
+globalStyle("#app", {
+  height: "100%",
+  width: "100%",
+  minHeight: 0,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
 });
 
 globalStyle(".mantine-ScrollArea-viewport", {

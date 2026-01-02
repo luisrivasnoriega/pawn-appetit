@@ -1,4 +1,4 @@
-import { ActionIcon, Collapse, Group, Paper, Stack, Tabs, Text } from "@mantine/core";
+import { ActionIcon, Box, Collapse, Group, Paper, Stack, Tabs, Text } from "@mantine/core";
 import { useToggle } from "@mantine/hooks";
 import {
   IconChevronDown,
@@ -118,15 +118,35 @@ function ResponsiveAnalysisPanels({
         minWidth: 0,
         overflow: "hidden",
         display: "flex",
-        flexDirection: "column",
+        flexDirection: "row",
       }}
       pos="relative"
     >
+      {!shouldCollapse && (
+        <Box
+          id="board-controls-rail"
+          style={{
+            flex: "0 0 auto",
+            width: "3rem",
+            minWidth: 0,
+            minHeight: 0,
+            display: "flex",
+            alignItems: "stretch",
+            justifyContent: "center",
+            borderRight: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4))",
+            paddingRight: "0.5rem",
+            marginRight: "0.5rem",
+            overflow: "hidden",
+          }}
+        />
+      )}
+
       <Tabs
         w="100%"
         h="100%"
         value={currentTab}
         onChange={onTabChange}
+        color="gold.4"
         keepMounted={false}
         activateTabWithKeyboard={false}
         style={{

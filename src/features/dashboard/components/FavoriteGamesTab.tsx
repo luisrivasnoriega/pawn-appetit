@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnalysisPreview } from "@/components/AnalysisPreview";
 import { currentThemeIdAtom } from "@/features/themes/state/themeAtoms";
-import { getAnalyzedGame } from "@/utils/analyzedGames";
+import { getAnalyzedGamesBulk } from "@/utils/analyzedGames";
 import type { ChessComGame } from "@/utils/chess.com/api";
 import type { GameRecord } from "@/utils/gameRecords";
 import type { FavoriteGame } from "@/utils/favoriteGames";
@@ -115,71 +115,55 @@ export function FavoriteGamesTab({
     });
   }, [favoriteGames, localGames, chessComGames, lichessGames]);
 
-  // Load analyzed PGNs for preview
-  useEffect(() => {
-    if (favoriteGameItems.length === 0) return;
-
-    let cancelled = false;
-
-    const loadAnalyzedPgns = async () => {
-      const pgnMap = new Map<string, string>();
-
-      for (const item of favoriteGameItems) {
-        if (cancelled) break;
-
-        try {
-          let gameId: string;
-          let pgn: string | undefined;
-
-          if (item.type === "local") {
-            gameId = item.game.id;
-            pgn = item.game.pgn ?? undefined;
-          } else if (item.type === "chesscom") {
-            gameId = item.game.url;
-            pgn = item.game.pgn ?? undefined;
-          } else {
-            gameId = item.game.id;
-            pgn = item.game.pgn ?? undefined;
-          }
-
-          const analyzedPgn = await getAnalyzedGame(gameId);
-          if (analyzedPgn) {
-            pgnMap.set(gameId, analyzedPgn);
-          } else if (pgn) {
-            pgnMap.set(gameId, pgn);
-          }
-        } catch {
-          // Silently skip games that fail to load
-        }
-
-        if (!cancelled) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-      }
-
-      if (!cancelled) {
-        setAnalyzedPgns(pgnMap);
-      }
-    };
-
-    const timeoutId = setTimeout(() => {
-      if (!cancelled) {
-        loadAnalyzedPgns().catch(() => {});
-      }
-    }, 100);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [favoriteGameItems]);
-
   // Paginate games
   const paginatedGames = useMemo(() => {
     const start = (page - 1) * itemsPerPage;
     const end = start + itemsPerPage;
     return favoriteGameItems.slice(start, end);
   }, [favoriteGameItems, page]);
+
+  // Load analyzed PGNs for preview (only for the visible page)
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAnalyzedPgns = async () => {
+      if (paginatedGames.length === 0) return;
+
+      const idsToLoad: string[] = [];
+      for (const item of paginatedGames) {
+        const id =
+          item.type === "local" ? item.game.id : item.type === "chesscom" ? item.game.url : item.game.id;
+        if (!analyzedPgns.has(id)) idsToLoad.push(id);
+      }
+      if (idsToLoad.length === 0) return;
+
+      const analyzed = await getAnalyzedGamesBulk(idsToLoad);
+      if (cancelled) return;
+
+      setAnalyzedPgns((prev) => {
+        const next = new Map(prev);
+        for (const item of paginatedGames) {
+          const gameId =
+            item.type === "local" ? item.game.id : item.type === "chesscom" ? item.game.url : item.game.id;
+          if (next.has(gameId)) continue;
+          const analyzedPgn = analyzed.get(gameId);
+          const fallbackPgn = item.type === "local" ? item.game.pgn : item.game.pgn;
+          if (analyzedPgn) {
+            next.set(gameId, analyzedPgn);
+          } else if (fallbackPgn) {
+            next.set(gameId, fallbackPgn);
+          }
+        }
+        return next;
+      });
+    };
+
+    loadAnalyzedPgns().catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paginatedGames, analyzedPgns]);
 
   const totalPages = Math.ceil(favoriteGameItems.length / itemsPerPage);
 

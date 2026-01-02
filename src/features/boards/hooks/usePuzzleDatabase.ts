@@ -57,6 +57,26 @@ export const usePuzzleDatabase = () => {
     };
   }, []);
 
+  // Migrate legacy values where `selectedDb` was stored as a filename (e.g. "puzzles.db3")
+  // into the full absolute path expected by the Rust commands.
+  useEffect(() => {
+    if (!selectedDb) return;
+    if (!selectedDb.endsWith(".db3")) return;
+
+    const looksLikePath = selectedDb.includes("/") || selectedDb.includes("\\") || selectedDb.includes(":");
+    if (looksLikePath) return;
+
+    (async () => {
+      try {
+        const { appDataDir, resolve } = await import("@tauri-apps/api/path");
+        const fullPath = await resolve(await appDataDir(), "puzzles", selectedDb);
+        setSelectedDb(fullPath);
+      } catch (e) {
+        logger.error("Failed to migrate selected puzzle db path:", e);
+      }
+    })();
+  }, [selectedDb, setSelectedDb]);
+
   const loadDb3RatingRange = useCallback(
     async (dbPath: string) => {
       PUZZLE_DEBUG_LOGS && logger.debug("Loading DB3 rating range:", dbPath);
@@ -130,20 +150,17 @@ export const usePuzzleDatabase = () => {
   const loadRatingRange = useCallback(
     async (dbPath: string) => {
       try {
-        // First verify the file exists before attempting to load rating range
+        // First verify the file exists before attempting to load rating range.
+        // `selectedDb` is stored as an absolute path (`PuzzleDatabaseInfo.path`).
         if (dbPath.endsWith(".db3")) {
           const { exists } = await import("@tauri-apps/plugin-fs");
-          const { appDataDir, resolve } = await import("@tauri-apps/api/path");
-          const appDataDirPath = await appDataDir();
-          const fullPath = await resolve(appDataDirPath, "puzzles", dbPath);
-          
-          const fileExists = await exists(fullPath);
+          const fileExists = await exists(dbPath);
           if (!fileExists) {
-            PUZZLE_DEBUG_LOGS && logger.debug("Database file does not exist yet:", fullPath);
+            PUZZLE_DEBUG_LOGS && logger.debug("Database file does not exist yet:", dbPath);
             setDbRatingRange([600, 2800]);
             return;
           }
-          
+
           await loadDb3RatingRange(dbPath);
         } else if (dbPath.endsWith(".pgn")) {
           await loadPgnRatingRange(dbPath);
@@ -212,6 +229,8 @@ export const usePuzzleDatabase = () => {
     if (!selectedGame.puzzle) {
       selectedGame.puzzle = await createPuzzleFromGame(selectedGame);
     }
+
+    selectedGame.puzzle.source = { type: "pgn", path: db, index: selectedGame.index };
 
     return selectedGame.puzzle;
   };

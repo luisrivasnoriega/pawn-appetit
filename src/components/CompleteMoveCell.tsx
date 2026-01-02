@@ -3,13 +3,13 @@ import { useClickOutside } from "@mantine/hooks";
 import { IconArrowsJoin, IconChevronsUp, IconChevronUp, IconCopy, IconFlag, IconX } from "@tabler/icons-react";
 import equal from "fast-deep-equal";
 import { useAtomValue } from "jotai";
-import { memo, useContext, useState } from "react";
+import { memo, useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { Comment } from "@/components/Comment";
 import { currentTabAtom } from "@/state/atoms";
 import type { Annotation } from "@/utils/annotation";
-import { hasMorePriority, stripClock } from "@/utils/chess";
+import { hasMorePriority, makeClk, stripClock } from "@/utils/chess";
 import { type TreeNode, treeIterator } from "@/utils/treeReducer";
 import MoveCell from "./MoveCell";
 import { TreeStateContext } from "./TreeStateContext";
@@ -36,6 +36,7 @@ function CompleteMoveCell({
   move,
   fen,
   comment,
+  clockSeconds,
   annotations,
   showComments,
   first,
@@ -45,6 +46,7 @@ function CompleteMoveCell({
 }: {
   halfMoves: number;
   comment: string;
+  clockSeconds?: number;
   annotations: Annotation[];
   showComments: boolean;
   move?: string | null;
@@ -77,6 +79,12 @@ function CompleteMoveCell({
   const transpositions =
     enableTranspositions && fen && root ? getTranspositions(fen, movePath, root) : [];
   const { t } = useTranslation();
+
+  const clockLabel = useMemo(() => {
+    if (clockSeconds === undefined) return null;
+    const full = makeClk(clockSeconds);
+    return full.startsWith("0:") ? full.slice(2) : full;
+  }, [clockSeconds]);
 
   return (
     <>
@@ -133,6 +141,20 @@ function CompleteMoveCell({
             </Portal>
           </Menu>
         )}
+        {clockLabel && (
+          <Box
+            component="span"
+            style={{
+              marginLeft: 6,
+              fontSize: "0.9em",
+              color: "var(--mantine-color-dimmed)",
+              fontVariantNumeric: "tabular-nums",
+              userSelect: "none",
+            }}
+          >
+            {clockLabel}
+          </Box>
+        )}
         {transpositions.length > 0 && (
           <Tooltip label={t("moves.transposition")}>
             <ActionIcon size="xs" onClick={() => goToMove(transpositions[0])}>
@@ -151,6 +173,7 @@ export default memo(CompleteMoveCell, (prev, next) => {
     prev.move === next.move &&
     prev.fen === next.fen &&
     prev.comment === next.comment &&
+    prev.clockSeconds === next.clockSeconds &&
     equal(prev.annotations, next.annotations) &&
     prev.showComments === next.showComments &&
     prev.first === next.first &&

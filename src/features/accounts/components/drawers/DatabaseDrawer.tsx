@@ -5,9 +5,10 @@ import Databases from "../Databases";
 interface DatabaseDrawerProps {
   opened: boolean;
   onClose: () => void;
+  initialPlayer?: string;
 }
 
-function DatabaseDrawer({ opened, onClose }: DatabaseDrawerProps) {
+function DatabaseDrawer({ opened, onClose, initialPlayer }: DatabaseDrawerProps) {
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   return (
@@ -25,7 +26,7 @@ function DatabaseDrawer({ opened, onClose }: DatabaseDrawerProps) {
         },
       }}
     >
-      <Databases />
+      <Databases initialPlayer={initialPlayer} />
     </Drawer>
   );
 }

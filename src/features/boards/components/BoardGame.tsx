@@ -1109,7 +1109,7 @@ function BoardGame() {
 
       // Build PGN headers
       let pgn = `[Event "${headers.event || "Local Game"}"]\n`;
-      pgn += `[Site "${headers.site || "Pawn Appetit"}"]\n`;
+      pgn += `[Site "${headers.site || "Obsidian Chess Studio"}"]\n`;
       pgn += `[Date "${headers.date || new Date().toISOString().split("T")[0].replace(/-/g, ".")}"]\n`;
       pgn += `[Round "${headers.round || "?"}"]\n`;
       pgn += `[White "${headers.white || "?"}"]\n`;

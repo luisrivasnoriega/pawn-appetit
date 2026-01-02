@@ -1,4 +1,4 @@
-import { Divider, Paper, Portal, ScrollArea, Stack } from "@mantine/core";
+import { Divider, Grid, Paper, ScrollArea } from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtom } from "jotai";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -20,11 +20,13 @@ import { positionFromFen } from "@/utils/chessops";
 import { logger } from "@/utils/logger";
 import { navigateToDatabasesWithModal } from "@/utils/navigation";
 import { getAdaptivePuzzleRange, PUZZLE_DEBUG_LOGS } from "@/utils/puzzles";
+import { debugNavLog } from "@/utils/debugNav";
 import { unwrap } from "@/utils/unwrap";
 import PuzzleBoard from "./PuzzleBoard";
 import { PuzzleControls } from "./PuzzleControls";
 import { PuzzleSettings } from "./PuzzleSettings";
 import { PuzzleStatistics } from "./PuzzleStatistics";
+import { PuzzleVariantsPanel } from "./PuzzleVariantsPanel";
 
 function Puzzles({ id }: { id: string }) {
   const navigate = useNavigate();
@@ -45,6 +47,11 @@ function Puzzles({ id }: { id: string }) {
     generatePuzzle: generatePuzzleFromDb,
     clearPuzzleCache,
   } = usePuzzleDatabase();
+
+  useEffect(() => {
+    debugNavLog("puzzles:mount", { id, selectedDb, puzzleDbs: puzzleDbs.length });
+    return () => debugNavLog("puzzles:unmount", { id });
+  }, [id, puzzleDbs.length, selectedDb]);
 
   const { puzzles, currentPuzzle, changeCompletion, addPuzzle, clearSession, selectPuzzle } = usePuzzleSession(id);
 
@@ -162,7 +169,7 @@ function Puzzles({ id }: { id: string }) {
     if (value === "add") {
       navigateToDatabasesWithModal(navigate, {
         tab: "puzzles",
-        redirectTo: "/boards",
+        redirectTo: "/puzzles",
       });
     } else {
       setSelectedDb(value);
@@ -300,8 +307,61 @@ function Puzzles({ id }: { id: string }) {
   }, [selectedDb]);
 
   return (
-    <>
-      <Portal target="#left" style={{ height: "100%" }}>
+    <Grid h="100%" gutter="md" style={{ flex: 1, minHeight: 0 }}>
+      <Grid.Col span={{ base: 12, md: 3 }} style={{ minHeight: 0, display: "flex" }}>
+        <Paper h="100%" w="100%" withBorder p="md" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <ScrollArea h="100%" offsetScrollbars>
+            <PuzzleSettings
+              puzzleDbs={puzzleDbs}
+              selectedDb={selectedDb}
+              onDatabaseChange={handleDatabaseChange}
+              ratingRange={ratingRange}
+              onRatingRangeChange={setRatingRange}
+              minRating={minRating}
+              maxRating={maxRating}
+              dbRatingRange={dbRatingRange}
+              progressive={progressive}
+              onProgressiveChange={setProgressive}
+              hideRating={hideRating}
+              onHideRatingChange={setHideRating}
+              inOrder={inOrder}
+              onInOrderChange={setInOrder}
+              hasThemes={hasThemes}
+              themes={themes}
+              themesOptions={themesOptions}
+              onThemesChange={setThemes}
+              hasOpeningTags={hasOpeningTags}
+              openingTags={openingTags}
+              openingTagsOptions={openingTagsOptions}
+              onOpeningTagsChange={setOpeningTags}
+            />
+            <Divider my="sm" />
+
+            <PuzzleControls
+              selectedDb={selectedDb}
+              onGeneratePuzzle={handleGeneratePuzzle}
+              onClearSession={handleClearSession}
+              changeCompletion={changeCompletion}
+              currentPuzzle={currentPuzzleData}
+              puzzles={puzzles}
+              jumpToNext={jumpToNext}
+              onJumpToNextChange={setJumpToNext}
+              turnToMove={turnToMove}
+              showingSolution={showingSolution}
+              updateShowingSolution={updateShowingSolution}
+              isShowingSolutionRef={isShowingSolutionRef}
+            />
+            <Divider my="sm" />
+
+            <PuzzleStatistics currentPuzzle={currentPuzzleData} />
+          </ScrollArea>
+        </Paper>
+      </Grid.Col>
+
+      <Grid.Col
+        span={{ base: 12, md: 6 }}
+        style={{ minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+      >
         <PuzzleBoard
           key={currentPuzzle}
           puzzles={puzzles}
@@ -311,77 +371,30 @@ function Puzzles({ id }: { id: string }) {
           db={selectedDb}
           jumpToNext={jumpToNext}
         />
-      </Portal>
+      </Grid.Col>
 
-      <Portal target="#topRight" style={{ height: "100%" }}>
-        <Paper h="100%" withBorder p="md">
-          <PuzzleSettings
-            puzzleDbs={puzzleDbs}
-            selectedDb={selectedDb}
-            onDatabaseChange={handleDatabaseChange}
-            ratingRange={ratingRange}
-            onRatingRangeChange={setRatingRange}
-            minRating={minRating}
-            maxRating={maxRating}
-            dbRatingRange={dbRatingRange}
-            progressive={progressive}
-            onProgressiveChange={setProgressive}
-            hideRating={hideRating}
-            onHideRatingChange={setHideRating}
-            inOrder={inOrder}
-            onInOrderChange={setInOrder}
-            hasThemes={hasThemes}
-            themes={themes}
-            themesOptions={themesOptions}
-            onThemesChange={setThemes}
-            hasOpeningTags={hasOpeningTags}
-            openingTags={openingTags}
-            openingTagsOptions={openingTagsOptions}
-            onOpeningTagsChange={setOpeningTags}
-          />
-          <Divider my="sm" />
+      <Grid.Col span={{ base: 12, md: 3 }} style={{ minHeight: 0, display: "flex" }}>
+        <Paper h="100%" w="100%" withBorder p="md" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <ScrollArea h="100%" offsetScrollbars>
+            <PuzzleVariantsPanel selectedDb={selectedDb} />
+            <Divider my="sm" />
 
-          <PuzzleControls
-            selectedDb={selectedDb}
-            onGeneratePuzzle={handleGeneratePuzzle}
-            onClearSession={handleClearSession}
-            changeCompletion={changeCompletion}
-            currentPuzzle={currentPuzzleData}
-            puzzles={puzzles}
-            jumpToNext={jumpToNext}
-            onJumpToNextChange={setJumpToNext}
-            turnToMove={turnToMove}
-            showingSolution={showingSolution}
-            updateShowingSolution={updateShowingSolution}
-            isShowingSolutionRef={isShowingSolutionRef}
-          />
-          <Divider my="sm" />
+            <ChallengeHistory
+              challenges={puzzles.map((p) => ({
+                ...p,
+                label: p.rating.toString(),
+              }))}
+              current={currentPuzzle}
+              select={handleSelectPuzzle}
+            />
+            <Divider my="sm" />
 
-          <PuzzleStatistics currentPuzzle={currentPuzzleData} />
-        </Paper>
-      </Portal>
-
-      <Portal target="#bottomRight" style={{ height: "100%" }}>
-        <Stack h="100%" gap="xs">
-          <Paper withBorder p="md" mih="5rem">
-            <ScrollArea h="100%" offsetScrollbars>
-              <ChallengeHistory
-                challenges={puzzles.map((p) => ({
-                  ...p,
-                  label: p.rating.toString(),
-                }))}
-                current={currentPuzzle}
-                select={handleSelectPuzzle}
-              />
-            </ScrollArea>
-          </Paper>
-          <Stack flex={1} gap="xs">
             <GameNotation initialVariationState="variations" />
             <MoveControls readOnly />
-          </Stack>
-        </Stack>
-      </Portal>
-    </>
+          </ScrollArea>
+        </Paper>
+      </Grid.Col>
+    </Grid>
   );
 }
 

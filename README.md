@@ -1,11 +1,11 @@
-<div align="center">
+﻿<div align="center">
 <!-- Logo -->
 <a href="https://github.com/Pawn-Appetit/pawn-appetit">
-<img src="https://github.com/Pawn-Appetit/pawn-appetit/raw/main/src-tauri/icons/icon.png" alt="Pawn Appétit Logo" width="120" />
+<img src="https://github.com/Pawn-Appetit/pawn-appetit/raw/main/src-tauri/icons/icon.png" alt="Obsidian Chess Studio Logo" width="120" />
 </a>
 
 <!-- Title & Tagline -->
-<h1 align="center">Pawn Appétit</h1>
+<h1 align="center">Obsidian Chess Studio</h1>
 
 <div>
 <a href="https://pawnappetit.com/"><strong>Website</strong></a> •
@@ -65,7 +65,7 @@
 <br />
 
 <a href="https://github.com/Pawn-Appetit/pawn-appetit/raw/main/screenshots/banner.png" target="_blank">
-<img src="https://github.com/Pawn-Appetit/pawn-appetit/raw/main/screenshots/banner.png" alt="Pawn Appétit GUI screenshot showcasing the main interface" width="85%" />
+<img src="https://github.com/Pawn-Appetit/pawn-appetit/raw/main/screenshots/banner.png" alt="Obsidian Chess Studio GUI screenshot showcasing the main interface" width="85%" />
 </a>
 <p>
 <em>Experience professional chess analysis with an intuitive, modern interface</em>
@@ -74,9 +74,9 @@
 
 ## Overview
 
-**Pawn Appétit** is a modern, open-source and cross-platform chess application designed for players who demand professional-grade analysis tools without the premium price tag. Built with Rust and Tauri for exceptional performance, it delivers advanced chess engine integration, game analysis, opening repertoire training, and more-all wrapped in an intuitive interface.
+**Obsidian Chess Studio** is a modern, open-source and cross-platform chess application designed for players who demand professional-grade analysis tools without the premium price tag. Built with Rust and Tauri for exceptional performance, it delivers advanced chess engine integration, game analysis, opening repertoire training, and more-all wrapped in an intuitive interface.
 
-Whether you're preparing for tournaments, analyzing your games, or building opening repertoires with spaced repetition, Pawn Appétit provides the tools you need in a fast, lightweight package.
+Whether you're preparing for tournaments, analyzing your games, or building opening repertoires with spaced repetition, Obsidian Chess Studio provides the tools you need in a fast, lightweight package.
 
 ## Table of Contents
 
@@ -150,7 +150,7 @@ Prebuilt binaries are available for Windows, macOS, and Linux:
 
 ### Quick Start
 
-1. Download and install Pawn Appétit for your platform
+1. Download and install Obsidian Chess Studio for your platform
 2. Launch the application
 3. Import a game from Lichess or Chess.com (or load a PGN file)
 4. Start analyzing with the built-in Stockfish engine
@@ -203,7 +203,7 @@ Ensure you have the required tools installed for your platform:
 
 ### Docker Build
 
-You can also build Pawn Appétit using Docker (make sure [Docker](https://www.docker.com/) is installed and running):
+You can also build Obsidian Chess Studio using Docker (make sure [Docker](https://www.docker.com/) is installed and running):
 
 1. **Build the Docker image**:
 
@@ -227,7 +227,7 @@ The binary will be available in your current directory.
 
 ## Comparison
 
-| Feature | Pawn Appétit | ChessBase | Arena | Scid |
+| Feature | Obsidian Chess Studio | ChessBase | Arena | Scid |
 |---------|--------------|-----------|-------|------|
 | **Price** | Free ✅ | $199+ ❌ | Free ✅ | Free ✅ |
 | **Modern UI** | ✅ | ❌ | ❌ | ❌ |
@@ -252,7 +252,7 @@ We welcome contributions of all kinds:
 
 ### Translations
 
-Pawn Appétit is for chess players **all around the world**! We're committed to making professional-grade chess analysis accessible in your language. Join our growing international community and help us reach **every chess player**, no matter where they are.
+Obsidian Chess Studio is for chess players **all around the world**! We're committed to making professional-grade chess analysis accessible in your language. Join our growing international community and help us reach **every chess player**, no matter where they are.
 
 <!-- TRANSLATIONS_START -->
 | Language  | Progress   | Link                        |
@@ -288,7 +288,7 @@ Join our [Discord server](https://discord.gg/8hk49G8ZbX) to:
 
 ## Privacy & Telemetry
 
-Pawn Appétit includes optional telemetry. Collected data includes:
+Obsidian Chess Studio includes optional telemetry. Collected data includes:
 
 - Application version, OS, and architecture
 - Anonymized country code (via local detection or `ip-api.com`)
@@ -302,10 +302,10 @@ For a list of recent changes, see the [Changelog](./CHANGELOG.md).
 
 ## License
 
-Pawn Appétit is licensed under the [GPL-3.0 License](./LICENSE).
+Obsidian Chess Studio is licensed under the [GPL-3.0 License](./LICENSE).
 
 ## Acknowledgments
 
-Pawn Appétit is a fork of [En Croissant](https://github.com/franciscoBSalgueiro/en-croissant), extended with additional features and refinements focused on user experience.
+Obsidian Chess Studio is a fork of [En Croissant](https://github.com/franciscoBSalgueiro/en-croissant), extended with additional features and refinements focused on user experience.
 
 Special thanks to all contributors and the chess programming community.

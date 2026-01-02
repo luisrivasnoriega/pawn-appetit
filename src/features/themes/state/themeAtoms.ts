@@ -91,6 +91,12 @@ export const initializeThemeAtom = atom(null, (get, set) => {
 
   const theme = allThemes.find((t) => t.id === currentThemeId) || builtInThemes[0];
 
+  // Migration: Academia Maya used to default to "maya" (jade). Restore the intended gold accent.
+  if (currentThemeId === "academia-maya" && currentPrimaryColor === "maya") {
+    set(primaryColorAtom, "gold");
+    return;
+  }
+
   // If no primary color is set, use the theme's primary color
   if (!currentPrimaryColor) {
     set(primaryColorAtom, theme.primaryColor);
@@ -296,6 +302,7 @@ export const setCurrentThemeAtom = atom(null, (get, set, themeId: string) => {
 
     // Academia Maya theme specific settings
     if (themeId === "academia-maya") {
+      set(colorSchemeAtom, "dark");
       // Set pieces to merida
       set(pieceSetAtom, "merida");
     } else {

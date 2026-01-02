@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { CSSProperties, JSX } from "react";
 import type { MosaicNode } from "react-mosaic-component";
 
 export const MOSAIC_PORTAL_IDS = {
@@ -50,10 +50,20 @@ export const CUSTOM_EVENTS = {
 export const REPORT_ID_PREFIX = "report_";
 
 export function createFullLayout(): { [viewId: string]: JSX.Element } {
+  const portalTargetStyle: CSSProperties = {
+    width: "100%",
+    height: "100%",
+    minWidth: 0,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  };
+
   return {
-    [MOSAIC_PORTAL_IDS.LEFT]: <div id={MOSAIC_PORTAL_IDS.LEFT} />,
-    [MOSAIC_PORTAL_IDS.TOP_RIGHT]: <div id={MOSAIC_PORTAL_IDS.TOP_RIGHT} />,
-    [MOSAIC_PORTAL_IDS.BOTTOM_RIGHT]: <div id={MOSAIC_PORTAL_IDS.BOTTOM_RIGHT} />,
+    [MOSAIC_PORTAL_IDS.LEFT]: <div id={MOSAIC_PORTAL_IDS.LEFT} style={portalTargetStyle} />,
+    [MOSAIC_PORTAL_IDS.TOP_RIGHT]: <div id={MOSAIC_PORTAL_IDS.TOP_RIGHT} style={portalTargetStyle} />,
+    [MOSAIC_PORTAL_IDS.BOTTOM_RIGHT]: <div id={MOSAIC_PORTAL_IDS.BOTTOM_RIGHT} style={portalTargetStyle} />,
   };
 }
 

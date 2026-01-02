@@ -1,4 +1,4 @@
-﻿{
+{
     "common":  {
                    "on":  "ON",
                    "off":  "OFF",
@@ -48,6 +48,7 @@
                    "duplicateTab":  "Duplicar pestaña",
                    "renameTab":  "Renombrar pestaña",
                    "closeTab":  "Cerrar pestaña",
+                   "openTabInNewWindow":  "Abrir pestaña en una nueva ventana",
                    "centerGraph":  "Centrar gráfico",
                    "cannotUndo":  "Esta acción no se puede deshacer.",
                    "nameAlreadyUsed":  "El nombre ya está en uso",
@@ -376,7 +377,7 @@
                           "failedToClearData":  "Error al limpiar los datos",
                           "openingLogs":  "Abriendo logs",
                           "failedToOpenLogFile":  "Error al abrir el archivo de log",
-                          "aboutTitle":  "Pawn Appétit",
+                          "aboutTitle":  "Obsidian Chess Studio",
                           "menuError":  "Error de menú",
                           "failedToCreateMenu":  "Error al crear el menú de la aplicación",
                           "versionReadyToInstall":  "La versión {{version}} está lista para instalar",
@@ -533,8 +534,8 @@
                                   "promoteVariation":  "Promover variación",
                                   "copyVariationPGN":  "Copiar variación PGN",
                                   "deleteMove":  "Eliminar movimiento",
-                                  "pawnAppetit":  "Pawn Appétit",
-                                  "quit":  "Salir de Pawn Appétit",
+                                  "pawnAppetit":  "Obsidian Chess Studio",
+                                  "quit":  "Salir de Obsidian Chess Studio",
                                   "newAnalysisBoard":  "Nuevo Tablero de Análisis",
                                   "newPlayBoard":  "Nuevo Tablero de Juego",
                                   "importPgn":  "Importar PGN",
@@ -569,7 +570,7 @@
                      "sidebar":  {
                                      "dashboard":  "Dashboard",
                                      "board":  "Tablero",
-                                     "accounts":  "Usuario",
+                                     "accounts":  "Cuentas",
                                      "files":  "Archivos",
                                      "databases":  "Bases de datos",
                                      "engines":  "Motores",
@@ -687,6 +688,11 @@
                                                                            "desc":  "Analizar una partida o posición",
                                                                            "button":  "Abrir"
                                                                        },
+                                                     "playBoard":  {
+                                                                           "title":  "Tablero de juego",
+                                                                           "desc":  "Juega una partida contra un motor o un amigo",
+                                                                           "button":  "Jugar"
+                                                                       },
                                                      "importGame":  {
                                                                         "title":  "Importar partida",
                                                                         "desc":  "Importar una partida desde un archivo PGN",
@@ -795,7 +801,7 @@
                                                            "lichessTokenDescription":  "Requerido para crear torneos en Lichess. Obtén tu token desde https://lichess.org/account/oauth/token/create"
                                                        },
                                        "welcome":  {
-                                                       "firstOpen":  "¡Bienvenido a Pawn Appétit!",
+                                                       "firstOpen":  "¡Bienvenido a Obsidian Chess Studio!",
                                                        "back":  "Bienvenido de nuevo",
                                                        "backWithName":  {
                                                                             "male":  "¡Bienvenido de nuevo, {{name}}!",
@@ -821,6 +827,11 @@
                                                         "title":  "Tablero de análisis",
                                                         "desc":  "Analiza una partida o posición",
                                                         "button":  "Analizar"
+                                                    },
+                                  "playBoard":  {
+                                                        "title":  "Tablero de juego",
+                                                        "desc":  "Juega una partida contra un motor o un amigo",
+                                                        "button":  "Jugar"
                                                     },
                                   "importGame":  {
                                                      "title":  "Importar partida",
@@ -1042,7 +1053,7 @@
                                              },
                                      "remove":  {
                                                     "title":  "Eliminar motor",
-                                                    "message":  "¿Está seguro de que desea eliminar este motor de Pawn Appétit?"
+                                                    "message":  "¿Está seguro de que desea eliminar este motor de Obsidian Chess Studio?"
                                                 },
                                      "searchPlaceholder":  "Buscar motores...",
                                      "noEnginesFound":  "No se encontraron motores",
@@ -1090,11 +1101,16 @@
                                                       "title":  "Eliminar base de datos",
                                                       "message":  "¿Está seguro de que desea eliminar esta base de datos?"
                                                   },
-                                       "category":  {
-                                                        "games":  "Partidas",
-                                                        "puzzles":  "Puzzles"
-                                                    }
-                                   },
+                                        "category":  {
+                                                         "games":  "Partidas",
+                                                         "puzzles":  "Puzzles"
+                                                     },
+                                        "source":  {
+                                                       "locals":  "Locales",
+                                                       "lichess":  "Lichess",
+                                                       "chesscom":  "Chess.com"
+                                                   }
+                                    },
                      "files":  {
                                    "title":  "Archivos",
                                    "fileType":  {
@@ -1459,6 +1475,12 @@
                                         "auto":  "Automático",
                                         "titleBar":  "Barra de título",
                                         "titleBarDesc":  "Elegir entre la barra de título nativa o personalizada",
+                                        "uiLayout":  {
+                                                         "title":  "Diseno de interfaz",
+                                                         "desc":  "Elige entre el diseno por defecto y Maya",
+                                                         "default":  "Por defecto",
+                                                         "maya":  "Maya"
+                                                     },
                                         "language":  "Idioma",
                                         "languageDesc":  "Idioma utilizado en la aplicación",
                                         "native":  "Nativa",
@@ -1518,7 +1540,7 @@
                                          "precacheCompleted":  "Precarga completada"
                                      },
                      "telemetry":  "Telemetría",
-                     "telemetryDesc":  "Ayuda a mejorar Pawn Appétit compartiendo datos de uso anónimos",
+                     "telemetryDesc":  "Ayuda a mejorar Obsidian Chess Studio compartiendo datos de uso anónimos",
                      "moveNotation":  "Notación de movimientos",
                      "moveNotationDesc":  "Elige cómo mostrar las piezas en la notación",
                      "symbols":  "Símbolos (♔♕♖♗♘)",
@@ -1536,9 +1558,9 @@
                      "interface":  "Interfaz",
                      "system":  "Sistema",
                      "about":  "Acerca de",
-                     "aboutDesc":  "Aprende más sobre Pawn Appétit",
+                     "aboutDesc":  "Aprende más sobre Obsidian Chess Studio",
                      "telemetryLoading":  "Cargando configuración de telemetría...",
-                     "telemetryDetails":  "Los datos de telemetría son anónimos y nos ayudan a entender cómo se usa Pawn Appétit para mejorar la experiencia. Nunca recopilamos información personal o contenido de partidas. Los datos se almacenan de forma segura usando Supabase.",
+                     "telemetryDetails":  "Los datos de telemetría son anónimos y nos ayudan a entender cómo se usa Obsidian Chess Studio para mejorar la experiencia. Nunca recopilamos información personal o contenido de partidas. Los datos se almacenan de forma segura usando Supabase.",
                      "pickValue":  "Seleccionar valor",
                      "pressAnyKey":  "Presiona cualquier tecla"
                  },
@@ -1558,7 +1580,7 @@
                         "openFile":  "Abrir archivo",
                         "saveFile":  "Guardar archivo",
                         "appReload":  "Recargar",
-                        "exitApp":  "Salir de Pawn Appétit",
+                        "exitApp":  "Salir de Obsidian Chess Studio",
                         "spotlightSearch":  "Búsqueda Spotlight",
                         "newBoardTab":  "Nueva pestaña de tablero",
                         "closeBoardTab":  "Cerrar pestaña de tablero",
@@ -1800,9 +1822,23 @@
                         "solid":  "Sólido",
                         "solidDescription":  "Valora seguridad y estructuras sólidas sobre juego agudo, priorizando solidez y estabilidad a largo plazo",
                         "solidFallbackDescription":  "Repertorio seguro y confiable con menos riesgos, enfocándose en estructuras sólidas y juego defensivo"
-    },
+                    },
     "puzzles":  {
                     "depthHelper":  "Selecciona cuantas jugadas incluir (max {{max}})",
                     "depthLabel":  "Profundidad"
-                }
+                },
+    "maya":  {
+                 "nav":  {
+                             "playVsPc":  "Jugar vs PC",
+                             "analysis":  "Analisis",
+                             "puzzles":  "Puzzles",
+                             "importGame":  "Importar partida",
+                             "engines":  "Motores",
+                             "databases":  "Bases de datos",
+                             "files":  "Archivos",
+                             "accounts":  "Cuentas",
+                             "tournaments":  "Torneos",
+                             "learn":  "Aprender"
+                         }
+             }
 }

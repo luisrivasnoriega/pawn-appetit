@@ -62,6 +62,7 @@ interface AccountCardProps {
   token?: string;
   isMain?: boolean;
   setMain?: () => void;
+  onOpenPlayerDatabases?: (playerName: string) => void;
 }
 
 export function AccountCard({
@@ -79,6 +80,7 @@ export function AccountCard({
   setSessions,
   isMain,
   setMain,
+  onOpenPlayerDatabases,
 }: AccountCardProps) {
   const { t } = useTranslation();
   const { layout } = useResponsiveLayout();
@@ -268,8 +270,10 @@ export function AccountCard({
       radius="md"
       p="lg"
       pos="relative"
+      onClick={() => onOpenPlayerDatabases?.(name)}
       style={(theme) => ({
         transition: "box-shadow 150ms ease, transform 150ms ease",
+        cursor: onOpenPlayerDatabases ? "pointer" : "default",
         "&:hover": {
           boxShadow: theme.shadows.md,
           transform: "translateY(-2px)",
@@ -318,6 +322,7 @@ export function AccountCard({
                     value={text}
                     onChange={(e) => setText(e.currentTarget.value)}
                     size="md"
+                    onClick={(e) => e.stopPropagation()}
                     styles={{
                       input: {
                         fontSize: rem(18),
@@ -347,7 +352,10 @@ export function AccountCard({
                 size="lg"
                 variant={isMain ? "light" : "subtle"}
                 color={isMain ? "blue" : "gray"}
-                onClick={setMain}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMain?.();
+                }}
                 aria-label={isMain ? t("accounts.accountCard.mainAccount") : t("accounts.accountCard.setAsMainAccount")}
                 radius="xl"
               >
@@ -406,7 +414,8 @@ export function AccountCard({
                     size="md"
                     variant="light"
                     color="teal"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setEdit(false);
                       setSessions((prev) =>
                         prev.map((s) => {
@@ -429,7 +438,8 @@ export function AccountCard({
                     size="md"
                     variant="subtle"
                     color="gray"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setEdit(false);
                       setText(name);
                     }}
@@ -442,12 +452,30 @@ export function AccountCard({
             ) : (
               <>
                 <Tooltip label={t("accounts.accountCard.editName")} position="top">
-                  <ActionIcon size="md" variant="subtle" color="gray" onClick={() => setEdit(true)} radius="md">
+                  <ActionIcon
+                    size="md"
+                    variant="subtle"
+                    color="gray"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEdit(true);
+                    }}
+                    radius="md"
+                  >
                     <IconEdit style={{ width: rem(16), height: rem(16) }} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label={t("accounts.accountCard.updateStats")} position="top">
-                  <ActionIcon size="md" variant="subtle" color="blue" onClick={() => reload()} radius="md">
+                  <ActionIcon
+                    size="md"
+                    variant="subtle"
+                    color="blue"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      reload();
+                    }}
+                    radius="md"
+                  >
                     <IconRefresh style={{ width: rem(16), height: rem(16) }} />
                   </ActionIcon>
                 </Tooltip>
@@ -457,7 +485,8 @@ export function AccountCard({
                     variant="subtle"
                     color="green"
                     disabled={loading}
-                    onClick={async () => {
+                    onClick={async (e) => {
+                      e.stopPropagation();
                       setLoading(true);
                       const lastGameDate = currentDatabase
                         ? await getLastGameDate({ database: currentDatabase })
@@ -485,7 +514,16 @@ export function AccountCard({
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label={t("accounts.accountCard.removeAccount")} position="top">
-                  <ActionIcon size="md" variant="subtle" color="red" onClick={() => logout()} radius="md">
+                  <ActionIcon
+                    size="md"
+                    variant="subtle"
+                    color="red"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      logout();
+                    }}
+                    radius="md"
+                  >
                     <IconX style={{ width: rem(16), height: rem(16) }} />
                   </ActionIcon>
                 </Tooltip>

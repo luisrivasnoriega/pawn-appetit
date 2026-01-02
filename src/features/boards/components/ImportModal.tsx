@@ -1,12 +1,13 @@
 import { Button, Checkbox, Group, Stack, Text, TextInput } from "@mantine/core";
 import type { ContextModalProps } from "@mantine/modals";
-import { useLoaderData } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { basename } from "@tauri-apps/api/path";
 import { makeFen, parseFen } from "chessops/fen";
 import { useAtom } from "jotai";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { match } from "ts-pattern";
+import { loadDirectories } from "@/App";
 import GenericCard from "@/components/GenericCard";
 import { FilenameInput } from "@/features/files/components/FilenameInput";
 import { FileTypeSelector } from "@/features/files/components/FileTypeSelector";
@@ -55,7 +56,8 @@ export default function ImportModal({ context, id }: ContextModalProps<{ modalBo
   const [save, setSave] = useState(false);
   const [filename, setFilename] = useState("");
   const [error, setError] = useState("");
-  const { documentDir } = useLoaderData({ from: "/boards" });
+  const { data: dirs } = useQuery({ queryKey: ["dirs"], queryFn: loadDirectories, staleTime: Infinity });
+  const documentDir = dirs?.documentDir ?? null;
 
   async function parseGamesFromTarget(
     resolvedTarget: ResolvedPgnTarget,
@@ -95,7 +97,7 @@ export default function ImportModal({ context, id }: ContextModalProps<{ modalBo
     return { trees, errors };
   }
 
-  async function processMultipleFiles(resolvedTarget: ResolvedPgnTarget): Promise<ImportResult> {
+  async function processMultipleFiles(resolvedTarget: ResolvedPgnTarget, dir: string): Promise<ImportResult> {
     if (resolvedTarget.type === "pgn") {
       const { trees, errors } = await parseGamesFromTarget(resolvedTarget);
 
@@ -107,7 +109,7 @@ export default function ImportModal({ context, id }: ContextModalProps<{ modalBo
             filename,
             filetype,
             pgn: resolvedTarget.content,
-            dir: documentDir,
+            dir,
           });
 
           if (newFile.isOk) {
@@ -117,7 +119,7 @@ export default function ImportModal({ context, id }: ContextModalProps<{ modalBo
               gameCount: trees.length,
             });
             await openFile(newFile.value.path, setTabs, setActiveTab);
-          } else {
+    } else {
             return {
               successCount: 0,
               totalGames: resolvedTarget.count,
@@ -170,16 +172,16 @@ export default function ImportModal({ context, id }: ContextModalProps<{ modalBo
             });
           });
 
-          if (trees.length > 0) {
-            if (save) {
-              const baseFileName = fileName.replace(/\.pgn$/i, "");
-              const finalFileName = `${filename}_${baseFileName}`;
-              const newFile = await createFile({
-                filename: finalFileName,
-                filetype,
-                pgn: singleFileTarget.content,
-                dir: documentDir,
-              });
+        if (trees.length > 0) {
+          if (save) {
+            const baseFileName = fileName.replace(/\.pgn$/i, "");
+            const finalFileName = `${filename}_${baseFileName}`;
+            const newFile = await createFile({
+              filename: finalFileName,
+              filetype,
+              pgn: singleFileTarget.content,
+              dir,
+            });
 
               if (newFile.isOk) {
                 importedFiles.push({
@@ -234,7 +236,7 @@ export default function ImportModal({ context, id }: ContextModalProps<{ modalBo
           filename,
           filetype,
           pgn: resolvedTarget.content,
-          dir: documentDir,
+          dir,
         });
 
         if (newFile.isOk) {
@@ -276,10 +278,17 @@ export default function ImportModal({ context, id }: ContextModalProps<{ modalBo
     setLoading(true);
     setImportResult(null);
 
+    if (save && !documentDir) {
+      setError(t("errors.missingFilePath"));
+      setLoading(false);
+      return;
+    }
+    const ensuredDir = documentDir ?? "";
+
     if (importType === "PGN") {
       try {
         const resolvedPgnTarget = await resolvePgnTarget(pgnTarget, filetype);
-        const result = await processMultipleFiles(resolvedPgnTarget);
+        const result = await processMultipleFiles(resolvedPgnTarget, ensuredDir);
         setImportResult(result);
       } catch (error) {
         setError(error instanceof Error ? error.message : String(error));

@@ -78,7 +78,7 @@ function GameCard({ game, file, mutate }: { game: NormalizedGame; file: string; 
                       id: game.id,
                     },
                   });
-                  navigate({ to: "/boards" });
+                  navigate({ to: "/analysis" });
                 }}
               >
                 <IconZoomCheck size={layout.databases.density === "compact" ? "1.4rem" : "1.2rem"} stroke={1.5} />

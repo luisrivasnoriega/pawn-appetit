@@ -10,9 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TournamentsRouteImport } from './routes/tournaments'
+import { Route as PuzzlesRouteImport } from './routes/puzzles'
+import { Route as PlayRouteImport } from './routes/play'
 import { Route as FilesRouteImport } from './routes/files'
 import { Route as EnginesRouteImport } from './routes/engines'
-import { Route as BoardsRouteImport } from './routes/boards'
+import { Route as AnalysisRouteImport } from './routes/analysis'
 import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as SettingsRouteRouteImport } from './routes/settings/route'
 import { Route as LearnRouteRouteImport } from './routes/learn/route'
@@ -30,6 +32,16 @@ const TournamentsRoute = TournamentsRouteImport.update({
   path: '/tournaments',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PuzzlesRoute = PuzzlesRouteImport.update({
+  id: '/puzzles',
+  path: '/puzzles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlayRoute = PlayRouteImport.update({
+  id: '/play',
+  path: '/play',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FilesRoute = FilesRouteImport.update({
   id: '/files',
   path: '/files',
@@ -40,9 +52,9 @@ const EnginesRoute = EnginesRouteImport.update({
   path: '/engines',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BoardsRoute = BoardsRouteImport.update({
-  id: '/boards',
-  path: '/boards',
+const AnalysisRoute = AnalysisRouteImport.update({
+  id: '/analysis',
+  path: '/analysis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountsRoute = AccountsRouteImport.update({
@@ -107,9 +119,11 @@ export interface FileRoutesByFullPath {
   '/learn': typeof LearnRouteRouteWithChildren
   '/settings': typeof SettingsRouteRouteWithChildren
   '/accounts': typeof AccountsRoute
-  '/boards': typeof BoardsRoute
+  '/analysis': typeof AnalysisRoute
   '/engines': typeof EnginesRoute
   '/files': typeof FilesRoute
+  '/play': typeof PlayRoute
+  '/puzzles': typeof PuzzlesRoute
   '/tournaments': typeof TournamentsRoute
   '/databases/$databaseId': typeof DatabasesDatabaseIdRoute
   '/learn/lessons': typeof LearnLessonsRoute
@@ -122,9 +136,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
-  '/boards': typeof BoardsRoute
+  '/analysis': typeof AnalysisRoute
   '/engines': typeof EnginesRoute
   '/files': typeof FilesRoute
+  '/play': typeof PlayRoute
+  '/puzzles': typeof PuzzlesRoute
   '/tournaments': typeof TournamentsRoute
   '/databases/$databaseId': typeof DatabasesDatabaseIdRoute
   '/learn/lessons': typeof LearnLessonsRoute
@@ -140,9 +156,11 @@ export interface FileRoutesById {
   '/learn': typeof LearnRouteRouteWithChildren
   '/settings': typeof SettingsRouteRouteWithChildren
   '/accounts': typeof AccountsRoute
-  '/boards': typeof BoardsRoute
+  '/analysis': typeof AnalysisRoute
   '/engines': typeof EnginesRoute
   '/files': typeof FilesRoute
+  '/play': typeof PlayRoute
+  '/puzzles': typeof PuzzlesRoute
   '/tournaments': typeof TournamentsRoute
   '/databases/$databaseId': typeof DatabasesDatabaseIdRoute
   '/learn/lessons': typeof LearnLessonsRoute
@@ -159,9 +177,11 @@ export interface FileRouteTypes {
     | '/learn'
     | '/settings'
     | '/accounts'
-    | '/boards'
+    | '/analysis'
     | '/engines'
     | '/files'
+    | '/play'
+    | '/puzzles'
     | '/tournaments'
     | '/databases/$databaseId'
     | '/learn/lessons'
@@ -174,9 +194,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/accounts'
-    | '/boards'
+    | '/analysis'
     | '/engines'
     | '/files'
+    | '/play'
+    | '/puzzles'
     | '/tournaments'
     | '/databases/$databaseId'
     | '/learn/lessons'
@@ -191,9 +213,11 @@ export interface FileRouteTypes {
     | '/learn'
     | '/settings'
     | '/accounts'
-    | '/boards'
+    | '/analysis'
     | '/engines'
     | '/files'
+    | '/play'
+    | '/puzzles'
     | '/tournaments'
     | '/databases/$databaseId'
     | '/learn/lessons'
@@ -209,9 +233,11 @@ export interface RootRouteChildren {
   LearnRouteRoute: typeof LearnRouteRouteWithChildren
   SettingsRouteRoute: typeof SettingsRouteRouteWithChildren
   AccountsRoute: typeof AccountsRoute
-  BoardsRoute: typeof BoardsRoute
+  AnalysisRoute: typeof AnalysisRoute
   EnginesRoute: typeof EnginesRoute
   FilesRoute: typeof FilesRoute
+  PlayRoute: typeof PlayRoute
+  PuzzlesRoute: typeof PuzzlesRoute
   TournamentsRoute: typeof TournamentsRoute
   DatabasesDatabaseIdRoute: typeof DatabasesDatabaseIdRoute
   DatabasesIndexRoute: typeof DatabasesIndexRoute
@@ -224,6 +250,20 @@ declare module '@tanstack/react-router' {
       path: '/tournaments'
       fullPath: '/tournaments'
       preLoaderRoute: typeof TournamentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/puzzles': {
+      id: '/puzzles'
+      path: '/puzzles'
+      fullPath: '/puzzles'
+      preLoaderRoute: typeof PuzzlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/play': {
+      id: '/play'
+      path: '/play'
+      fullPath: '/play'
+      preLoaderRoute: typeof PlayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/files': {
@@ -240,11 +280,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EnginesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/boards': {
-      id: '/boards'
-      path: '/boards'
-      fullPath: '/boards'
-      preLoaderRoute: typeof BoardsRouteImport
+    '/analysis': {
+      id: '/analysis'
+      path: '/analysis'
+      fullPath: '/analysis'
+      preLoaderRoute: typeof AnalysisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accounts': {
@@ -362,9 +402,11 @@ const rootRouteChildren: RootRouteChildren = {
   LearnRouteRoute: LearnRouteRouteWithChildren,
   SettingsRouteRoute: SettingsRouteRouteWithChildren,
   AccountsRoute: AccountsRoute,
-  BoardsRoute: BoardsRoute,
+  AnalysisRoute: AnalysisRoute,
   EnginesRoute: EnginesRoute,
   FilesRoute: FilesRoute,
+  PlayRoute: PlayRoute,
+  PuzzlesRoute: PuzzlesRoute,
   TournamentsRoute: TournamentsRoute,
   DatabasesDatabaseIdRoute: DatabasesDatabaseIdRoute,
   DatabasesIndexRoute: DatabasesIndexRoute,

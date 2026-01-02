@@ -13,10 +13,10 @@ function EvalBar({ score, orientation }: { score: ScoreValue | null; orientation
 
   // Colors for Academia Maya theme - more contrasting
   const isAcademiaMaya = currentThemeId === "academia-maya";
-  const blackColor = isAcademiaMaya ? "#1a1a1a" : theme.colors.dark[4];
-  const whiteColor = isAcademiaMaya ? "#f5ead5" : theme.colors.gray[2];
-  const blackTextColor = isAcademiaMaya ? "#f5ead5" : theme.colors.gray[2];
-  const whiteTextColor = isAcademiaMaya ? "#1a1a1a" : theme.colors.dark[8];
+  const blackColor = isAcademiaMaya ? theme.black : theme.colors.dark[4];
+  const whiteColor = isAcademiaMaya ? theme.white : theme.colors.gray[2];
+  const blackTextColor = isAcademiaMaya ? theme.white : theme.colors.gray[2];
+  const whiteTextColor = isAcademiaMaya ? theme.black : theme.colors.dark[8];
 
   let ScoreBars = [
     <Box

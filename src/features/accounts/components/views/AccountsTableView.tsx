@@ -29,11 +29,13 @@ import type { DatabaseInfo } from "@/bindings";
 import { commands } from "@/bindings";
 import type { SortState } from "@/components/GenericHeader";
 import { sessionsAtom } from "@/state/atoms";
-import { getChessComAccount, getStats } from "@/utils/chess.com/api";
+import { downloadChessCom, getChessComAccount, getStats } from "@/utils/chess.com/api";
 import { capitalize, parseDate } from "@/utils/format";
-import { getLichessAccount } from "@/utils/lichess/api";
+import { downloadLichess, getLichessAccount } from "@/utils/lichess/api";
 import { getAccountFideId, saveMainAccount } from "@/utils/mainAccount";
 import type { Session } from "@/utils/session";
+import { query_games } from "@/utils/db";
+import { unwrap } from "@/utils/unwrap";
 import LichessLogo from "../LichessLogo";
 
 interface AccountsTableViewProps {
@@ -42,6 +44,8 @@ interface AccountsTableViewProps {
   query?: string;
   sortBy?: SortState;
   isLoading?: boolean;
+  platformFilter?: "all" | "lichess" | "chesscom";
+  onOpenPlayerDatabases?: (playerName: string) => void;
 }
 
 type StatItem = { value: number; label: string; diff?: number };
@@ -63,13 +67,26 @@ type Row = {
 
 function AccountsTableView({
   databases,
+  setDatabases,
   query = "",
   sortBy = { field: "name", direction: "asc" },
   isLoading = false,
+  platformFilter = "all",
+  onOpenPlayerDatabases,
 }: AccountsTableViewProps) {
   const { t } = useTranslation();
   const sessions = useAtomValue(sessionsAtom);
   const [, setSessions] = useAtom(sessionsAtom);
+
+  const filteredSessions = useMemo(() => {
+    if (platformFilter === "lichess") {
+      return sessions.filter((s) => !!s.lichess);
+    }
+    if (platformFilter === "chesscom") {
+      return sessions.filter((s) => !!s.chessCom);
+    }
+    return sessions;
+  }, [platformFilter, sessions]);
 
   const [mainAccount, setMainAccount] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<string | null>(null);
@@ -117,12 +134,12 @@ function AccountsTableView({
     () =>
       Array.from(
         new Set(
-          sessions
+          filteredSessions
             .map((s) => s.player ?? s.lichess?.username ?? s.chessCom?.username)
             .filter((n): n is string => typeof n === "string" && n.length > 0),
         ),
       ),
-    [sessions],
+    [filteredSessions],
   );
 
   // Memoize player sessions grouping
@@ -130,11 +147,58 @@ function AccountsTableView({
     () =>
       playerNames.map((name) => ({
         name,
-        sessions: sessions.filter(
+        sessions: filteredSessions.filter(
           (s) => s.player === name || s.lichess?.username === name || s.chessCom?.username === name,
         ),
       })),
-    [playerNames, sessions],
+    [filteredSessions, playerNames],
+  );
+
+  const getLastGameDate = useCallback(async (db: DatabaseInfo): Promise<number | null> => {
+    const games = await query_games(db.file, {
+      options: {
+        page: 1,
+        pageSize: 1,
+        sort: "date",
+        direction: "desc",
+        skipCount: false,
+      },
+    });
+    const count = games.count ?? 0;
+    if (count > 0 && games.data[0].date && games.data[0].time) {
+      const [year, month, day] = games.data[0].date.split(".").map(Number);
+      const [hour, minute, second] = games.data[0].time.split(":").map(Number);
+      return Date.UTC(year, month - 1, day, hour, minute, second);
+    }
+    return null;
+  }, []);
+
+  const handleDownload = useCallback(
+    async (row: Row) => {
+      const lastGameDate = row.database && row.database.type === "success" ? await getLastGameDate(row.database) : null;
+
+      if (row.type === "lichess") {
+        const token = row.session.lichess?.accessToken;
+        const gamesToDownload = Math.max(0, row.totalGames - row.downloadedGames);
+        await downloadLichess(row.username, lastGameDate, gamesToDownload, () => {}, token);
+      } else {
+        await downloadChessCom(row.username, lastGameDate);
+      }
+
+      const dbDir = await resolve(await appDataDir(), "db");
+      const pgnPath = await resolve(dbDir, `${row.username}_${row.type}.pgn`);
+      const dbPath = await resolve(dbDir, `${row.username}_${row.type}.db3`);
+      const displayTitle = `${row.username}${row.type === "lichess" ? " Lichess" : " Chess.com"}`;
+
+      unwrap(await commands.convertPgn(pgnPath, dbPath, lastGameDate ? lastGameDate / 1000 : null, displayTitle, null));
+
+      // Refresh database list so counts are updated in the table.
+      try {
+        const { getDatabases } = await import("@/utils/db");
+        setDatabases(await getDatabases());
+      } catch {}
+    },
+    [getLastGameDate, setDatabases],
   );
 
   // Memoize filtered and sorted results
@@ -404,7 +468,11 @@ function AccountsTableView({
           </Table.Thead>
           <Table.Tbody>
             {rows.map((row) => (
-              <Table.Tr key={row.key}>
+              <Table.Tr
+                key={row.key}
+                onClick={() => onOpenPlayerDatabases?.(row.name)}
+                style={{ cursor: onOpenPlayerDatabases ? "pointer" : "default" }}
+              >
                 <Table.Td>
                   <Tooltip
                     label={
@@ -416,7 +484,10 @@ function AccountsTableView({
                     <ActionIcon
                       size="sm"
                       variant="subtle"
-                      onClick={() => setMainAccount(row.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMainAccount(row.name);
+                      }}
                       aria-label={
                         mainAccount === row.name
                           ? t("accounts.accountCard.mainAccount")
@@ -433,17 +504,29 @@ function AccountsTableView({
                       <input
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
                         style={{ padding: "0.25rem", fontSize: "0.875rem" }}
                       />
                       <ActionIcon
                         size="xs"
                         variant="subtle"
                         color="green"
-                        onClick={() => handleSaveEdit(row.username, row.type)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSaveEdit(row.username, row.type);
+                        }}
                       >
                         <IconCheck size="1rem" />
                       </ActionIcon>
-                      <ActionIcon size="xs" variant="subtle" color="red" onClick={() => setEditingAccount(null)}>
+                      <ActionIcon
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingAccount(null);
+                        }}
+                      >
                         <IconX size="1rem" />
                       </ActionIcon>
                     </Group>
@@ -455,7 +538,8 @@ function AccountsTableView({
                       <ActionIcon
                         size="xs"
                         variant="subtle"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setEditingAccount(`${row.type}_${row.username}`);
                           setEditValue(row.name);
                         }}
@@ -508,17 +592,39 @@ function AccountsTableView({
                 <Table.Td>
                   <Group gap="xs" wrap="nowrap">
                     <Tooltip label={t("accounts.accountCard.updateStats")}>
-                      <ActionIcon size="sm" variant="subtle" onClick={() => handleReload(row.session)}>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReload(row.session);
+                        }}
+                      >
                         <IconRefresh size="1rem" />
                       </ActionIcon>
                     </Tooltip>
                     <Tooltip label={t("accounts.accountCard.downloadGames")}>
-                      <ActionIcon size="sm" variant="subtle">
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDownload(row);
+                        }}
+                      >
                         <IconDownload size="1rem" />
                       </ActionIcon>
                     </Tooltip>
                     <Tooltip label={t("accounts.accountCard.removeAccount")}>
-                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleRemove(row.session)}>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="red"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemove(row.session);
+                        }}
+                      >
                         <IconX size="1rem" />
                       </ActionIcon>
                     </Tooltip>

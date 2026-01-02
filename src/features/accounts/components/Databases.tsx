@@ -37,7 +37,7 @@ interface PersonalInfo {
   info: PlayerGameInfo;
 }
 
-function Databases() {
+function Databases({ initialPlayer }: { initialPlayer?: string }) {
   const { t } = useTranslation();
   const sessions = useAtomValue(sessionsAtom);
 
@@ -53,10 +53,11 @@ function Databases() {
 
   const [name, setName] = useState("");
   useEffect(() => {
-    if (sessions.length > 0) {
-      setName(sessions[0].player || getSessionUsername(sessions[0]));
-    }
-  }, [sessions]);
+    if (sessions.length === 0) return;
+    const fallback = sessions[0].player || getSessionUsername(sessions[0]);
+    const next = initialPlayer && players.includes(initialPlayer) ? initialPlayer : fallback;
+    setName(next);
+  }, [initialPlayer, players, sessions]);
 
   const { data: databases } = useQuery<DatabaseInfo[]>({
     queryKey: ["personalDatabases", sessions],

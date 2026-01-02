@@ -1,5 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, resolve } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { exists, readTextFile } from "@tauri-apps/plugin-fs";
 import type { GameStats } from "@/utils/gameRecords";
 
 /**
@@ -11,7 +12,76 @@ interface AnalyzedGamesMap {
   [gameId: string]: string;
 }
 
-const FILENAME = "analyzed_games.json";
+const LEGACY_ANALYZED_FILENAME = "analyzed_games.json";
+const LEGACY_STATS_FILENAME = "game_stats.json";
+const MIGRATION_FLAG = "analysisDb.migratedFromJson.v1";
+
+type AnalyzedGameRow = { game_id: string; analyzed_pgn: string };
+type StoredGameStats = { accuracy: number; acpl: number; estimatedElo?: number | null };
+type StoredGameStatsRowBulk = { gameId: string; accuracy: number; acpl: number; estimatedElo?: number | null };
+
+let migrationAttempted = false;
+
+async function migrateLegacyJsonToSqlite(): Promise<void> {
+  if (migrationAttempted) return;
+  migrationAttempted = true;
+
+  try {
+    if (typeof window !== "undefined" && localStorage.getItem(MIGRATION_FLAG) === "1") {
+      return;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const dir = await appDataDir();
+    const analyzedFile = await resolve(dir, LEGACY_ANALYZED_FILENAME);
+    const statsFile = await resolve(dir, LEGACY_STATS_FILENAME);
+
+    if (await exists(analyzedFile)) {
+      try {
+        const text = await readTextFile(analyzedFile);
+        const analyzedGames = JSON.parse(text) as Record<string, string>;
+        for (const [gameId, analyzedPgn] of Object.entries(analyzedGames)) {
+          if (!gameId || !analyzedPgn) continue;
+          await invoke("analysis_db_set_analyzed_game", { gameId, analyzedPgn });
+        }
+      } catch {
+        // ignore legacy parse errors
+      }
+    }
+
+    if (await exists(statsFile)) {
+      try {
+        const text = await readTextFile(statsFile);
+        const stats = JSON.parse(text) as Record<string, GameStats>;
+        for (const [gameId, gameStats] of Object.entries(stats)) {
+          if (!gameId || !gameStats) continue;
+          if (typeof gameStats.accuracy !== "number" || typeof gameStats.acpl !== "number") continue;
+          await invoke("analysis_db_set_game_stats", {
+            gameId,
+            stats: {
+              accuracy: gameStats.accuracy,
+              acpl: gameStats.acpl,
+              estimatedElo: gameStats.estimatedElo ?? null,
+            },
+          });
+        }
+      } catch {
+        // ignore legacy parse errors
+      }
+    }
+
+    try {
+      if (typeof window !== "undefined") localStorage.setItem(MIGRATION_FLAG, "1");
+    } catch {
+      // ignore
+    }
+  } catch {
+    // ignore migration errors (best-effort)
+  }
+}
 
 /**
  * Save an analyzed PGN for a game
@@ -19,17 +89,8 @@ const FILENAME = "analyzed_games.json";
  * @param analyzedPgn - The analyzed PGN string
  */
 export async function saveAnalyzedGame(gameId: string, analyzedPgn: string): Promise<void> {
-  const dir = await appDataDir();
-  const file = await resolve(dir, FILENAME);
-  let analyzedGames: AnalyzedGamesMap = {};
-  try {
-    const text = await readTextFile(file);
-    analyzedGames = JSON.parse(text);
-  } catch {
-    // file may not exist yet
-  }
-  analyzedGames[gameId] = analyzedPgn;
-  await writeTextFile(file, JSON.stringify(analyzedGames));
+  await migrateLegacyJsonToSqlite();
+  await invoke("analysis_db_set_analyzed_game", { gameId, analyzedPgn });
 }
 
 /**
@@ -38,15 +99,8 @@ export async function saveAnalyzedGame(gameId: string, analyzedPgn: string): Pro
  * @returns The analyzed PGN string if found, null otherwise
  */
 export async function getAnalyzedGame(gameId: string): Promise<string | null> {
-  const dir = await appDataDir();
-  const file = await resolve(dir, FILENAME);
-  try {
-    const text = await readTextFile(file);
-    const analyzedGames: AnalyzedGamesMap = JSON.parse(text);
-    return analyzedGames[gameId] || null;
-  } catch {
-    return null;
-  }
+  await migrateLegacyJsonToSqlite();
+  return (await invoke<string | null>("analysis_db_get_analyzed_game", { gameId })) ?? null;
 }
 
 /**
@@ -54,14 +108,12 @@ export async function getAnalyzedGame(gameId: string): Promise<string | null> {
  * @returns Map of game IDs to analyzed PGNs
  */
 export async function getAllAnalyzedGames(): Promise<AnalyzedGamesMap> {
-  const dir = await appDataDir();
-  const file = await resolve(dir, FILENAME);
-  try {
-    const text = await readTextFile(file);
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
+  await migrateLegacyJsonToSqlite();
+  const rows = (await invoke<AnalyzedGameRow[]>("analysis_db_get_all_analyzed_games")) ?? [];
+  return rows.reduce<AnalyzedGamesMap>((acc, row) => {
+    if (row?.game_id && row?.analyzed_pgn) acc[row.game_id] = row.analyzed_pgn;
+    return acc;
+  }, {});
 }
 
 /**
@@ -69,17 +121,8 @@ export async function getAllAnalyzedGames(): Promise<AnalyzedGamesMap> {
  * @param gameId - Unique identifier (URL for Chess.com, ID for Lichess)
  */
 export async function removeAnalyzedGame(gameId: string): Promise<void> {
-  const dir = await appDataDir();
-  const file = await resolve(dir, FILENAME);
-  let analyzedGames: AnalyzedGamesMap = {};
-  try {
-    const text = await readTextFile(file);
-    analyzedGames = JSON.parse(text);
-  } catch {
-    return;
-  }
-  delete analyzedGames[gameId];
-  await writeTextFile(file, JSON.stringify(analyzedGames));
+  await migrateLegacyJsonToSqlite();
+  await invoke("analysis_db_delete_entries", { gameIds: [gameId] });
 }
 
 /**
@@ -88,18 +131,10 @@ export async function removeAnalyzedGame(gameId: string): Promise<void> {
  * @param type - Type of account ("lichess" or "chesscom")
  */
 export async function removeAnalyzedGamesForAccount(username: string, type: "lichess" | "chesscom"): Promise<void> {
-  const dir = await appDataDir();
-  const file = await resolve(dir, FILENAME);
-  let analyzedGames: AnalyzedGamesMap = {};
-  try {
-    const text = await readTextFile(file);
-    analyzedGames = JSON.parse(text);
-  } catch {
-    return;
-  }
+  await migrateLegacyJsonToSqlite();
+  const analyzedGames = await getAllAnalyzedGames();
 
-  // Filter out games that belong to this account
-  const filteredGames: AnalyzedGamesMap = {};
+  const idsToDelete: string[] = [];
   for (const [gameId, pgn] of Object.entries(analyzedGames)) {
     let belongsToAccount = false;
 
@@ -128,22 +163,20 @@ export async function removeAnalyzedGamesForAccount(username: string, type: "lic
         whiteName.toLowerCase() === username.toLowerCase() || blackName.toLowerCase() === username.toLowerCase();
     }
 
-    // Keep the game only if it does NOT belong to this account
-    if (!belongsToAccount) {
-      filteredGames[gameId] = pgn;
-    }
+    if (belongsToAccount) idsToDelete.push(gameId);
   }
 
-  await writeTextFile(file, JSON.stringify(filteredGames));
+  if (idsToDelete.length > 0) {
+    await invoke("analysis_db_delete_entries", { gameIds: idsToDelete });
+  }
 }
 
 /**
  * Remove ALL analyzed games (clear all analysis)
  */
 export async function clearAllAnalyzedGames(): Promise<void> {
-  const dir = await appDataDir();
-  const file = await resolve(dir, FILENAME);
-  await writeTextFile(file, JSON.stringify({}));
+  await migrateLegacyJsonToSqlite();
+  await invoke("analysis_db_clear_analyzed_pgns");
 }
 
 /**
@@ -151,29 +184,21 @@ export async function clearAllAnalyzedGames(): Promise<void> {
  * Key: game identifier (URL for Chess.com, ID for Lichess)
  * Value: GameStats object
  */
-interface GameStatsMap {
-  [gameId: string]: GameStats;
-}
-
-const STATS_FILENAME = "game_stats.json";
-
 /**
  * Save game stats for a game
  * @param gameId - Unique identifier (URL for Chess.com, ID for Lichess)
  * @param stats - The game stats including estimatedElo
  */
 export async function saveGameStats(gameId: string, stats: GameStats): Promise<void> {
-  const dir = await appDataDir();
-  const file = await resolve(dir, STATS_FILENAME);
-  let gameStats: GameStatsMap = {};
-  try {
-    const text = await readTextFile(file);
-    gameStats = JSON.parse(text);
-  } catch {
-    // file may not exist yet
-  }
-  gameStats[gameId] = stats;
-  await writeTextFile(file, JSON.stringify(gameStats, null, 2));
+  await migrateLegacyJsonToSqlite();
+  await invoke("analysis_db_set_game_stats", {
+    gameId,
+    stats: {
+      accuracy: stats.accuracy,
+      acpl: stats.acpl,
+      estimatedElo: stats.estimatedElo ?? null,
+    },
+  });
 }
 
 /**
@@ -182,13 +207,40 @@ export async function saveGameStats(gameId: string, stats: GameStats): Promise<v
  * @returns The game stats if found, null otherwise
  */
 export async function getGameStats(gameId: string): Promise<GameStats | null> {
-  try {
-    const dir = await appDataDir();
-    const file = await resolve(dir, STATS_FILENAME);
-    const text = await readTextFile(file);
-    const gameStats: GameStatsMap = JSON.parse(text);
-    return gameStats[gameId] || null;
-  } catch {
-    return null;
+  await migrateLegacyJsonToSqlite();
+  const stats = (await invoke<StoredGameStats | null>("analysis_db_get_game_stats", { gameId })) ?? null;
+  if (!stats) return null;
+  return {
+    accuracy: stats.accuracy,
+    acpl: stats.acpl,
+    ...(stats.estimatedElo != null ? { estimatedElo: stats.estimatedElo } : {}),
+  };
+}
+
+export async function getGameStatsBulk(gameIds: string[]): Promise<Map<string, GameStats>> {
+  await migrateLegacyJsonToSqlite();
+  if (!gameIds.length) return new Map();
+  const rows = (await invoke<StoredGameStatsRowBulk[]>("analysis_db_get_game_stats_bulk", { gameIds })) ?? [];
+  const out = new Map<string, GameStats>();
+  for (const row of rows) {
+    if (!row?.gameId) continue;
+    out.set(row.gameId, {
+      accuracy: row.accuracy,
+      acpl: row.acpl,
+      ...(row.estimatedElo != null ? { estimatedElo: row.estimatedElo } : {}),
+    });
   }
+  return out;
+}
+
+export async function getAnalyzedGamesBulk(gameIds: string[]): Promise<Map<string, string>> {
+  await migrateLegacyJsonToSqlite();
+  if (!gameIds.length) return new Map();
+  const rows = (await invoke<AnalyzedGameRow[]>("analysis_db_get_analyzed_games_bulk", { gameIds })) ?? [];
+  const out = new Map<string, string>();
+  for (const row of rows) {
+    if (!row?.game_id || !row?.analyzed_pgn) continue;
+    out.set(row.game_id, row.analyzed_pgn);
+  }
+  return out;
 }

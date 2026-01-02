@@ -3,17 +3,20 @@
     "identifier": "main-capability",
     "description": "Capability for the main window",
     "windows": [
-        "main"
+        "main",
+        "tearoff_*"
     ],
     "permissions": [
         "core:window:default",
         "core:window:allow-start-dragging",
+        "core:window:allow-create",
         "core:window:allow-set-decorations",
         "core:window:allow-toggle-maximize",
         "core:window:allow-minimize",
         "core:window:allow-unmaximize",
         "core:window:allow-unminimize",
         "core:window:allow-close",
+        "core:webview:allow-create-webview-window",
         "core:event:default",
         "core:event:allow-listen",
         "core:event:allow-emit",

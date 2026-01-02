@@ -2,16 +2,17 @@ import { Text } from "@mantine/core";
 import { useHotkeys } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { useLoaderData } from "@tanstack/react-router";
 import { useAtom, useAtomValue } from "jotai";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 import { commands } from "@/bindings";
 import { MAX_TABS } from "@/features/boards/constants";
 import { activeTabAtom, tabsAtom } from "@/state/atoms";
 import { createTreeStore } from "@/state/store/tree";
 import { keyMapAtom } from "@/state/keybindings";
+import { getDocumentDir } from "@/utils/documentDir";
 import { createTab, genID, saveToFile, type Tab } from "@/utils/tabs";
 import { getTabState as getTabStateRaw, removeTabState, setTabState } from "@/utils/tabStateStorage";
 import { unwrap } from "@/utils/unwrap";
@@ -48,25 +49,64 @@ function getTabStateData(tabId: string): { version: number; state: { dirty?: boo
   }
 }
 
-export function useTabManagement() {
+export function useTabManagement(options?: { enableHotkeys?: boolean }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [tabs, setTabs] = useAtom(tabsAtom);
   const [activeTab, setActiveTab] = useAtom(activeTabAtom);
-  const { documentDir } = useLoaderData({ from: "/boards" });
+  const enableHotkeys = options?.enableHotkeys ?? true;
 
   useEffect(() => {
     if (tabs.length === 0) {
-      createTab({
-        tab: { name: t("features.tabs.newTab"), type: "new" },
-        setTabs,
-        setActiveTab,
-      });
+      setActiveTab(null);
+      return;
     }
-  }, [tabs, setActiveTab, setTabs, t]);
+
+    if (activeTab && tabs.some((tab) => tab.value === activeTab)) {
+      return;
+    }
+
+    setActiveTab(tabs[0].value);
+  }, [activeTab, setActiveTab, tabs]);
 
   const closeTab = useCallback(
     async (value: string | null, forced?: boolean) => {
       if (value !== null) {
+        const isClosingLastTab = tabs.length === 1 && tabs[0]?.value === value;
+        const isClosingActiveTab = value === activeTab;
+
+        const closingIndex = tabs.findIndex((t) => t.value === value);
+        const newTabsSnapshot = closingIndex === -1 ? tabs : tabs.filter((t) => t.value !== value);
+        const nextActiveTabValueSnapshot =
+          !isClosingActiveTab || closingIndex === -1
+            ? activeTab
+            : newTabsSnapshot.length === 0
+              ? null
+              : closingIndex === tabs.length - 1
+                ? newTabsSnapshot[closingIndex - 1]?.value ?? null
+                : newTabsSnapshot[closingIndex]?.value ?? null;
+        const nextActiveTabSnapshot =
+          nextActiveTabValueSnapshot != null
+            ? newTabsSnapshot.find((t) => t.value === nextActiveTabValueSnapshot) ?? null
+            : null;
+
+        // If we are closing the last tab for the current boards route (/analysis, /play, /puzzles),
+        // BoardsRouteEntry will try to recreate it. Mark that we want to skip that ensure once.
+        if (isClosingActiveTab && typeof window !== "undefined") {
+          const path = window.location.pathname;
+          const routeMode = path === "/analysis" ? "analysis" : path === "/play" ? "play" : path === "/puzzles" ? "puzzles" : null;
+          if (routeMode) {
+            const hasRemainingSameModeTab = newTabsSnapshot.some((t) =>
+              routeMode === "analysis" ? t.type === "analysis" || t.type === "new" : t.type === routeMode,
+            );
+            if (!hasRemainingSameModeTab) {
+              try {
+                sessionStorage.setItem("boardsRouteEntry.skipEnsureOnce", routeMode);
+              } catch {}
+            }
+          }
+        }
+
         const tabState = getTabStateData(value);
         const tab = tabs.find((t) => t.value === value);
         const isDirty = !!tabState?.state?.dirty;
@@ -84,6 +124,7 @@ export function useTabManagement() {
               void (async () => {
                 const noopSetCurrentTab: Dispatch<SetStateAction<Tab>> = () => {};
                 const tabStore = createTreeStore(value);
+                const documentDir = await getDocumentDir();
                 await saveToFile({
                   dir: documentDir,
                   setCurrentTab: noopSetCurrentTab,
@@ -122,12 +163,33 @@ export function useTabManagement() {
           return newTabs;
         });
 
+        if (isClosingLastTab) {
+          try {
+            sessionStorage.setItem("tabsClosedToZero", "1");
+          } catch {}
+          navigate({ to: "/" });
+        } else if (isClosingActiveTab && nextActiveTabSnapshot) {
+          try {
+            const path = window.location.pathname;
+            const isBoardsRoute = path === "/analysis" || path === "/play" || path === "/puzzles";
+            if (isBoardsRoute) {
+              const to =
+                nextActiveTabSnapshot.type === "play"
+                  ? "/play"
+                  : nextActiveTabSnapshot.type === "puzzles"
+                    ? "/puzzles"
+                    : "/analysis";
+              navigate({ to });
+            }
+          } catch {}
+        }
+
         try {
           unwrap(await commands.killEngines(value));
         } catch {}
       }
     },
-    [documentDir, setActiveTab, setTabs, t, tabs],
+    [activeTab, navigate, setActiveTab, setTabs, t, tabs],
   );
 
   const selectTab = useCallback(
@@ -210,58 +272,62 @@ export function useTabManagement() {
   );
 
   const keyMap = useAtomValue(keyMapAtom);
-  useHotkeys([
-    [keyMap.CLOSE_BOARD_TAB.keys, () => closeTab(activeTab, true)],
-    [keyMap.CYCLE_BOARD_TABS.keys, () => cycleTabs()],
-    [keyMap.REVERSE_CYCLE_BOARD_TABS.keys, () => cycleTabs(true)],
-    [keyMap.BOARD_TAB_ONE.keys, () => selectTab(0)],
-    [keyMap.BOARD_TAB_TWO.keys, () => selectTab(1)],
-    [keyMap.BOARD_TAB_THREE.keys, () => selectTab(2)],
-    [keyMap.BOARD_TAB_FOUR.keys, () => selectTab(3)],
-    [keyMap.BOARD_TAB_FIVE.keys, () => selectTab(4)],
-    [keyMap.BOARD_TAB_SIX.keys, () => selectTab(5)],
-    [keyMap.BOARD_TAB_SEVEN.keys, () => selectTab(6)],
-    [keyMap.BOARD_TAB_EIGHT.keys, () => selectTab(7)],
-    [
-      keyMap.BOARD_TAB_LAST.keys,
-      () => {
-        setTabs((prevTabs) => {
-          selectTab(prevTabs.length - 1);
-          return prevTabs;
-        });
-      },
-    ],
-    [
-      keyMap.DUPLICATE_TAB.keys,
-      () => {
-        setActiveTab((current) => {
-          if (current) {
-            duplicateTab(current);
-          }
-          return current;
-        });
-      },
-    ],
-    [
-      keyMap.NEW_GAME.keys,
-      () => {
-        if (tabs.length >= MAX_TABS) {
-          notifications.show({
-            title: t("features.tabs.limitReached"),
-            message: t("features.tabs.limitReachedDesc", { max: MAX_TABS }),
-            color: "yellow",
-            autoClose: 5000,
-          });
-          return;
-        }
-        createTab({
-          tab: { name: "Play", type: "play" },
-          setTabs,
-          setActiveTab,
-        });
-      },
-    ],
-  ]);
+  useHotkeys(
+    enableHotkeys
+      ? [
+          [keyMap.CLOSE_BOARD_TAB.keys, () => closeTab(activeTab, true)],
+          [keyMap.CYCLE_BOARD_TABS.keys, () => cycleTabs()],
+          [keyMap.REVERSE_CYCLE_BOARD_TABS.keys, () => cycleTabs(true)],
+          [keyMap.BOARD_TAB_ONE.keys, () => selectTab(0)],
+          [keyMap.BOARD_TAB_TWO.keys, () => selectTab(1)],
+          [keyMap.BOARD_TAB_THREE.keys, () => selectTab(2)],
+          [keyMap.BOARD_TAB_FOUR.keys, () => selectTab(3)],
+          [keyMap.BOARD_TAB_FIVE.keys, () => selectTab(4)],
+          [keyMap.BOARD_TAB_SIX.keys, () => selectTab(5)],
+          [keyMap.BOARD_TAB_SEVEN.keys, () => selectTab(6)],
+          [keyMap.BOARD_TAB_EIGHT.keys, () => selectTab(7)],
+          [
+            keyMap.BOARD_TAB_LAST.keys,
+            () => {
+              setTabs((prevTabs) => {
+                selectTab(prevTabs.length - 1);
+                return prevTabs;
+              });
+            },
+          ],
+          [
+            keyMap.DUPLICATE_TAB.keys,
+            () => {
+              setActiveTab((current) => {
+                if (current) {
+                  duplicateTab(current);
+                }
+                return current;
+              });
+            },
+          ],
+          [
+            keyMap.NEW_GAME.keys,
+            () => {
+              if (tabs.length >= MAX_TABS) {
+                notifications.show({
+                  title: t("features.tabs.limitReached"),
+                  message: t("features.tabs.limitReachedDesc", { max: MAX_TABS }),
+                  color: "yellow",
+                  autoClose: 5000,
+                });
+                return;
+              }
+              createTab({
+                tab: { name: t("features.tabs.playBoard.title"), type: "play" },
+                setTabs,
+                setActiveTab,
+              });
+            },
+          ],
+        ]
+      : [],
+  );
 
   const canCreateNewTab = useCallback(() => {
     return tabs.length < MAX_TABS;

@@ -2,12 +2,13 @@ import type { Piece } from "@lichess-org/chessground/types";
 import { Box, Portal } from "@mantine/core";
 import { useHotkeys, useToggle } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { useLoaderData } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
+import { loadDirectories } from "@/App";
 import MoveControls from "@/components/MoveControls";
 import { TreeStateContext } from "@/components/TreeStateContext";
 import { useDebouncedAutoSave } from "@/features/boards/hooks/useDebouncedAutoSave";
@@ -30,6 +31,7 @@ import EvalListener from "./EvalListener";
 import GameNotationWrapper from "./GameNotationWrapper";
 import ResponsiveAnalysisPanels from "./ResponsiveAnalysisPanels";
 import ResponsiveBoard from "./ResponsiveBoard";
+import { debugNavLog } from "@/utils/debugNav";
 
 function BoardAnalysis() {
   const { t } = useTranslation();
@@ -38,10 +40,15 @@ function BoardAnalysis() {
   const [viewPawnStructure, setViewPawnStructure] = useState(false);
   const [currentTab, setCurrentTab] = useAtom(currentTabAtom);
   const autoSave = useAtomValue(autoSaveAtom);
-  const { documentDir } = useLoaderData({ from: "/boards" });
+  const { data: dirs } = useQuery({ queryKey: ["dirs"], queryFn: loadDirectories, staleTime: Infinity });
+  const documentDir = dirs?.documentDir ?? null;
   const boardRef = useRef<HTMLDivElement | null>(null);
 
   const store = useContext(TreeStateContext)!;
+  useEffect(() => {
+    debugNavLog("board-analysis:mount", { documentDir });
+    return () => debugNavLog("board-analysis:unmount");
+  }, [documentDir]);
 
   const dirty = useStore(store, (s) => s.dirty);
 
@@ -66,6 +73,14 @@ function BoardAnalysis() {
           await saveTab(currentTab, store);
           setStoreSave();
         } else {
+          if (!documentDir) {
+            notifications.show({
+              title: t("common.error"),
+              message: t("errors.missingFilePath"),
+              color: "red",
+            });
+            return;
+          }
           await saveToFile({
             dir: documentDir,
             setCurrentTab,

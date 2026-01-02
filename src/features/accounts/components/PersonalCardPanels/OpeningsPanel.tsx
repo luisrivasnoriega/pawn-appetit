@@ -170,7 +170,7 @@ function OpeningDetail({ opening, totalGames, color }: { opening: OpeningStats; 
               setActiveTab,
               position: Array(countMainPly(tree.root)).fill(0),
             });
-            navigate({ to: "/boards" });
+            navigate({ to: "/analysis" });
           }}
         >
           {opening.name}

@@ -9,6 +9,10 @@ export const PUZZLE_DEBUG_LOGS = false;
 
 export type Completion = "correct" | "incorrect" | "incomplete";
 
+export type PuzzleSource =
+  | { type: "db3"; path: string }
+  | { type: "pgn"; path: string; index: number };
+
 export interface Puzzle {
   fen: string;
   moves: string[];
@@ -17,6 +21,7 @@ export interface Puzzle {
   popularity: number;
   nb_plays: number;
   completion: Completion;
+  source?: PuzzleSource;
 }
 
 // Elo rating configuration
@@ -122,10 +127,18 @@ async function getFilesFromFilesSection(): Promise<PuzzleDatabaseInfo[]> {
     // Convert puzzle files to database format
     localPuzzles = await Promise.all(
       puzzleFiles.map(async (file) => {
+        const fileInfo = file.metadata as FileInfoMetadata;
+        const tags = Array.isArray(fileInfo?.tags) ? fileInfo.tags.filter((t): t is string => typeof t === "string") : [];
+        const isPuzzleVariants = tags.includes("puzzle-variants");
+        const variantName = tags.find((tag) => tag.startsWith("variant:"))?.slice("variant:".length).trim() || null;
+        const depth = tags.find((tag) => tag.startsWith("depth:"))?.slice("depth:".length).trim() || null;
+
         const stats = unwrap(await commands.getFileMetadata(file.path));
         return {
           title: file.name.replace(".pgn", ""),
-          description: "Custom puzzle collection",
+          description: isPuzzleVariants
+            ? `Puzzle variants${variantName ? ` • ${variantName}` : ""}${depth ? ` • d${depth}` : ""}`
+            : "Custom puzzle collection",
           puzzleCount: unwrap(await commands.countPgnGames(file.path)),
           storageSize: BigInt(stats.size),
           path: file.path,

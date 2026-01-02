@@ -5,7 +5,7 @@ import { IconChartBar } from "@tabler/icons-react";
 import type { ChessComGame } from "@/utils/chess.com/api";
 import type { GameRecord } from "@/utils/gameRecords";
 import type { FavoriteGame } from "@/utils/favoriteGames";
-import { getAllAnalyzedGames, getAnalyzedGame } from "@/utils/analyzedGames";
+import { getAllAnalyzedGames } from "@/utils/analyzedGames";
 import { ChessComGamesTab } from "./ChessComGamesTab";
 import { LichessGamesTab } from "./LichessGamesTab";
 import { LocalGamesTab } from "./LocalGamesTab";
@@ -124,7 +124,7 @@ export function GamesHistoryCard({
           // Count analyzed local games for the player
           for (const game of localGames) {
             if (cancelled) break;
-            const analyzedPgn = await getAnalyzedGame(game.id);
+            const analyzedPgn = analyzedGames[game.id];
             if (analyzedPgn) {
               // Check if player name matches
               const playerNameLower = selectedPlayerName!.toLowerCase();

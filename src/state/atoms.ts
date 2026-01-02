@@ -51,7 +51,7 @@ export const tabsAtom = atomWithStorage<Tab[]>("tabs", [], createZodStorage(z.ar
 
 export const activeTabAtom = atomWithStorage<string | null>(
   "activeTab",
-  "",
+  null,
   createJSONStorage(() => sessionStorage),
 );
 
@@ -98,7 +98,6 @@ export const autoPromoteAtom = atomWithStorage<boolean>("auto-promote", true);
 export const autoSaveAtom = atomWithStorage<boolean>("auto-save", true);
 export const previewBoardOnHoverAtom = atomWithStorage<boolean>("preview-board-on-hover", true);
 export const enableBoardScrollAtom = atomWithStorage<boolean>("board-scroll", true);
-export const forcedEnPassantAtom = atomWithStorage<boolean>("forced-ep", false);
 export const showCoordinatesAtom = atomWithStorage<"none" | "inside" | "all">("coordinates-mode", "inside", undefined, {
   getOnInit: true,
 });
@@ -116,21 +115,6 @@ export const blindfoldAtom = atomWithStorage<boolean>("blindfold-mode", false);
 // Legacy primary color atom for backward compatibility
 export const primaryColorAtom = atomWithStorage<MantineColor>("mantine-primary-color", "blue");
 export const sessionsAtom = atomWithStorage<Session[]>("sessions", []);
-export const nativeBarAtom = atomWithStorage<boolean>("native-bar", false);
-export const showDashboardOnStartupAtom = atomWithStorage<boolean>("show-dashboard-on-startup", true, undefined, {
-  getOnInit: true,
-});
-
-// Sidebar quick actions
-export const showPlayInSidebarAtom = atomWithStorage<boolean>("show-play-in-sidebar", false, undefined, {
-  getOnInit: true,
-});
-export const showAnalyzeInSidebarAtom = atomWithStorage<boolean>("show-analyze-in-sidebar", false, undefined, {
-  getOnInit: true,
-});
-export const showPuzzlesInSidebarAtom = atomWithStorage<boolean>("show-puzzles-in-sidebar", false, undefined, {
-  getOnInit: true,
-});
 
 // Database
 

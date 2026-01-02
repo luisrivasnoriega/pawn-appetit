@@ -1,4 +1,4 @@
-# Contributing
+﻿# Contributing
 
 When it comes to open source, there are different ways you can contribute, all of which are valuable. Here's few guidelines that should help you as you prepare your contribution.
 
@@ -61,7 +61,7 @@ The following steps will get you setup to contribute changes to this repo:
 
 ## Contributing Translations
 
-Help us make Pawn Appétit accessible to everyone by contributing a new translation or improving an existing one! Your contributions are valuable and easy to make.
+Help us make Obsidian Chess Studio accessible to everyone by contributing a new translation or improving an existing one! Your contributions are valuable and easy to make.
 
 ### How to Contribute Translations
 

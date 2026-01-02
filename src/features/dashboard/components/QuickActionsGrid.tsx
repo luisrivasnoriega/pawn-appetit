@@ -1,6 +1,7 @@
 import type { MantineColor } from "@mantine/core";
 import { Button, Card, Group, SimpleGrid, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconArrowRight } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 interface QuickAction {
   icon: React.ReactNode;
@@ -15,6 +16,8 @@ interface QuickActionsGridProps {
 }
 
 export function QuickActionsGrid({ actions }: QuickActionsGridProps) {
+  const { t } = useTranslation();
+
   return (
     <Card withBorder p="lg" radius="md" h="100%">
       <SimpleGrid cols={{ base: 1, xs: 2, sm: 2, md: 2, lg: 4, xl: 4 }}>
@@ -31,7 +34,7 @@ export function QuickActionsGrid({ actions }: QuickActionsGridProps) {
                 {qa.description}
               </Text>
               <Button variant="light" rightSection={<IconArrowRight size={16} />} onClick={qa.onClick}>
-                Open
+                {t("common.open")}
               </Button>
             </Stack>
           </Card>

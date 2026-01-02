@@ -628,62 +628,6 @@ async validatePuzzleDatabase(file: string) : Promise<Result<boolean, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async getTelemetryEnabled() : Promise<Result<boolean, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_telemetry_enabled") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async setTelemetryEnabled(enabled: boolean) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("set_telemetry_enabled", { enabled }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async getTelemetryConfig() : Promise<Result<TelemetryConfig, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_telemetry_config") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async getUserCountryApi() : Promise<Result<string | null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_user_country_api") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async getUserCountryLocale() : Promise<Result<string | null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_user_country_locale") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async getUserIdCommand() : Promise<Result<string, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_user_id_command") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async getPlatformInfoCommand() : Promise<Result<string, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_platform_info_command") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async checkPackageManagerAvailable(manager: string) : Promise<Result<boolean, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("check_package_manager_available", { manager }) };
@@ -732,6 +676,78 @@ async upsertVariantPosition(fen: string, engine: string, recommendedMove: string
     else return { status: "error", error: e  as any };
 }
 },
+async analysisDbSetAnalyzedGame(gameId: string, analyzedPgn: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_set_analyzed_game", { gameId, analyzedPgn }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbGetAnalyzedGame(gameId: string) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_get_analyzed_game", { gameId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbGetAllAnalyzedGames() : Promise<Result<AnalyzedGameEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_get_all_analyzed_games") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbSetGameStats(gameId: string, stats: StoredGameStats) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_set_game_stats", { gameId, stats }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbGetGameStats(gameId: string) : Promise<Result<StoredGameStats | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_get_game_stats", { gameId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbGetGameStatsBulk(gameIds: string[]) : Promise<Result<GameStatsEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_get_game_stats_bulk", { gameIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbDeleteEntries(gameIds: string[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_delete_entries", { gameIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbClearAnalyzedPgns() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_clear_analyzed_pgns") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async analysisDbGetAnalyzedGamesBulk(gameIds: string[]) : Promise<Result<AnalyzedGameEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("analysis_db_get_analyzed_games_bulk", { gameIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async openExternalLink(url: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_external_link", { url }) };
@@ -767,6 +783,7 @@ reportProgress: "report-progress"
  * Options for full-game analysis (FEN, moves, novelty annotation, etc).
  */
 export type AnalysisOptions = { fen: string; moves: string[]; annotateNovelties: boolean; referenceDb: string | null; reversed: boolean }
+export type AnalyzedGameEntry = { game_id: string; analyzed_pgn: string }
 /**
  * Best-move line from engine output, including PV, score, and stats.
  */
@@ -807,6 +824,7 @@ export type GameQueryJs = { options?: QueryOptions<GameSort> | null;
  */
 game_details_limit?: bigint | null; player1?: number | null; player2?: number | null; tournament_id?: number | null; start_date?: string | null; end_date?: string | null; range1?: [number, number] | null; range2?: [number, number] | null; sides?: Sides | null; outcome?: string | null; position?: PositionQueryJs | null; wanted_result?: string | null }
 export type GameSort = "id" | "date" | "whiteElo" | "blackElo" | "averageElo" | "ply_count"
+export type GameStatsEntry = { gameId: string; accuracy: number; acpl: number; estimatedElo: bigint | null }
 /**
  * Engine search mode (depth, time, nodes, etc).
  */
@@ -884,7 +902,7 @@ export type Sides = "BlackWhite" | "WhiteBlack" | "Any"
 export type SiteStatsData = { site: string; player: string; data: StatsData[] }
 export type SortDirection = "asc" | "desc"
 export type StatsData = { date: string; is_player_white: boolean; player_elo: number; result: GameOutcome; time_control: string; opening: string }
-export type TelemetryConfig = { enabled: boolean; initial_run_completed: boolean }
+export type StoredGameStats = { accuracy: number; acpl: number; estimatedElo: bigint | null }
 /**
  * Theme group containing a category name and its themes
  */

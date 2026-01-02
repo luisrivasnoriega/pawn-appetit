@@ -1,4 +1,4 @@
--- Core database schema for Pawn Appétit
+﻿-- Core database schema for Obsidian Chess Studio
 -- Contains the main table definitions for chess game storage
 
 CREATE TABLE Info (

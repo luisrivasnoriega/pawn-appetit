@@ -65,7 +65,7 @@ function FileCard({
       srcInfo: selected,
       gameNumber: page,
     });
-    navigate({ to: "/boards" });
+    navigate({ to: "/analysis" });
   }
 
   function handleDelete() {

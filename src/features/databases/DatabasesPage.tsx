@@ -94,6 +94,14 @@ const CATEGORY_OPTIONS = [
   { labelKey: "features.databases.category.puzzles", value: "puzzles" as const },
 ] as const;
 
+type DatabaseSource = "all" | "locals" | "lichess" | "chesscom";
+
+const SOURCE_OPTIONS = [
+  { labelKey: "features.databases.source.locals", value: "locals" as const },
+  { labelKey: "features.databases.source.lichess", value: "lichess" as const },
+  { labelKey: "features.databases.source.chesscom", value: "chesscom" as const },
+] as const;
+
 export default function DatabasesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -129,6 +137,7 @@ export default function DatabasesPage() {
     if (search.tab === "games") return "games";
     return "all";
   });
+  const [source, setSource] = useState<DatabaseSource>("all");
   const [convertLoading, setConvertLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
@@ -220,8 +229,8 @@ export default function DatabasesPage() {
   const isReference = referenceDatabase === selectedDatabase?.file;
 
   const filteredDatabases = useMemo(() => {
-    return filterAndSortDatabases(unifiedDatabases, category, query, sortBy, t);
-  }, [unifiedDatabases, category, query, sortBy, t]);
+    return filterAndSortDatabases(unifiedDatabases, category, source, query, sortBy, t);
+  }, [unifiedDatabases, category, source, query, sortBy, t]);
 
   const handleDatabaseDoubleClick = useCallback(
     (database: UnifiedDatabase) => {
@@ -277,27 +286,43 @@ export default function DatabasesPage() {
         pageKey="databases"
         filters={
           <>
-            <Group>
-              {CATEGORY_OPTIONS.map((option) => (
-                <Chip
-                  key={option.value}
-                  variant="outline"
-                  onChange={() => {
-                    setCategory(option.value === category ? "all" : option.value);
-                  }}
-                  checked={option.value === category}
-                >
-                  {t(option.labelKey)}
-                </Chip>
-              ))}
-            </Group>
-
-            {progress && convertLoading && (
-              <Group align="center" justify="space-between" maw={200}>
-                <Text fz="xs">{progress.total} games</Text>
-                <Text fz="xs">{(progress.total / progress.elapsed).toFixed(1)} games/s</Text>
+            <Stack gap="xs">
+              <Group>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <Chip
+                    key={option.value}
+                    variant="outline"
+                    onChange={() => {
+                      setCategory(option.value === category ? "all" : option.value);
+                    }}
+                    checked={option.value === category}
+                  >
+                    {t(option.labelKey)}
+                  </Chip>
+                ))}
               </Group>
-            )}
+              <Group>
+                {SOURCE_OPTIONS.map((option) => (
+                  <Chip
+                    key={option.value}
+                    variant="outline"
+                    onChange={() => {
+                      setSource(option.value === source ? "all" : option.value);
+                    }}
+                    checked={option.value === source}
+                  >
+                    {t(option.labelKey)}
+                  </Chip>
+                ))}
+              </Group>
+
+              {progress && convertLoading && (
+                <Group align="center" justify="space-between" maw={200}>
+                  <Text fz="xs">{progress.total} games</Text>
+                  <Text fz="xs">{(progress.total / progress.elapsed).toFixed(1)} games/s</Text>
+                </Group>
+              )}
+            </Stack>
           </>
         }
         actions={
@@ -1114,6 +1139,7 @@ async function fetchPuzzleFiles() {
 function filterAndSortDatabases(
   databases: UnifiedDatabase[],
   category: DatabaseCategory,
+  source: DatabaseSource,
   query: string,
   sortBy: SortState,
   // biome-ignore lint/suspicious/noExplicitAny: Translation function type
@@ -1125,6 +1151,10 @@ function filterAndSortDatabases(
     filtered = filtered.filter(isGameDatabase);
   } else if (category === "puzzles") {
     filtered = filtered.filter(isPuzzleDatabase);
+  }
+
+  if (source !== "all") {
+    filtered = filtered.filter((db) => getDatabaseSource(db) === source);
   }
 
   if (query.trim()) {
@@ -1156,6 +1186,31 @@ function filterAndSortDatabases(
 
     return sortBy.direction === "asc" ? comparison : -comparison;
   });
+}
+
+function getDatabaseSource(db: UnifiedDatabase): Exclude<DatabaseSource, "all"> {
+  const haystack = (() => {
+    if (!isSuccessDatabase(db)) {
+      return db.file.toLowerCase();
+    }
+
+    return [db.title, db.filename, db.file, db.description ?? ""].join(" ").toLowerCase();
+  })();
+
+  if (haystack.includes("_lichess.db3") || haystack.includes(" lichess") || haystack.includes("lichess ")) {
+    return "lichess";
+  }
+  if (
+    haystack.includes("_chesscom.db3") ||
+    haystack.includes(" chess.com") ||
+    haystack.includes("chess.com ") ||
+    haystack.includes(" chesscom") ||
+    haystack.includes("chesscom ")
+  ) {
+    return "chesscom";
+  }
+
+  return "locals";
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: Translation function type

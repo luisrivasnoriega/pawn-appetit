@@ -5,13 +5,14 @@ import { Box, Button, Group, Modal, NumberInput, Portal, SegmentedControl, Selec
 import { useHotkeys, useToggle } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { IconGitBranch, IconPuzzle } from "@tabler/icons-react";
-import { useLoaderData } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
+import { loadDirectories } from "@/App";
 import MoveControls from "@/components/MoveControls";
 import { TreeStateContext } from "@/components/TreeStateContext";
 import { useDebouncedAutoSave } from "@/features/boards/hooks/useDebouncedAutoSave";
@@ -77,7 +78,8 @@ function BoardVariants() {
   const [viewPawnStructure, setViewPawnStructure] = useState(false);
   const [currentTab, setCurrentTab] = useAtom(currentTabAtom);
   const autoSave = useAtomValue(autoSaveAtom);
-  const { documentDir } = useLoaderData({ from: "/boards" });
+  const { data: dirs } = useQuery({ queryKey: ["dirs"], queryFn: loadDirectories, staleTime: Infinity });
+  const documentDir = dirs?.documentDir ?? null;
   const boardRef = useRef<HTMLDivElement | null>(null);
   const activeTab = useAtomValue(activeTabAtom);
 
@@ -120,6 +122,14 @@ function BoardVariants() {
           }
         } else {
           // Save to a new file
+          if (!documentDir) {
+            notifications.show({
+              title: t("common.error"),
+              message: t("errors.missingFilePath"),
+              color: "red",
+            });
+            return;
+          }
           await saveToFile({
             dir: documentDir,
             setCurrentTab,
@@ -219,8 +229,19 @@ function BoardVariants() {
         });
         return;
       }
+
+      if (!documentDir) {
+        notifications.show({
+          title: t("common.error"),
+          message: t("errors.missingFilePath"),
+          color: "red",
+        });
+        return;
+      }
+
       // Open save dialog
-      const baseName = `${getVariantBaseName()}-d${selectedDepth}-${formatDateToPGN(new Date())}`;
+      const variantName = getVariantBaseName();
+      const baseName = `puzzle-variants-${variantName}-d${selectedDepth}-${formatDateToPGN(new Date())}`;
       const filePath = await save({
         defaultPath: `${documentDir}/${baseName}.pgn`,
         filters: [
@@ -235,6 +256,33 @@ function BoardVariants() {
 
       // Get filename without extension
       const fileName = filePath.replace(/\.pgn$/, "").split(/[/\\]/).pop() || baseName;
+      const tags = ["puzzle-variants", `variant:${variantName}`, `depth:${selectedDepth}`];
+
+      const mainlineNodes: TreeNode[] = [];
+      let currentNode = root;
+      const maxMainlinePlies = 80;
+      while (mainlineNodes.length < maxMainlinePlies && currentNode.children.length > 0) {
+        const child = currentNode.children.find((c) => c.san) ?? currentNode.children[0];
+        if (!child?.san) break;
+        mainlineNodes.push(child);
+        currentNode = child;
+      }
+
+      const mainline = mainlineNodes
+        .map((move, index) =>
+          getMoveText(move, {
+            glyphs: false,
+            comments: false,
+            extraMarkups: false,
+            isFirst: index === 0 || move.halfMoves % 2 === 0,
+          }),
+        )
+        .join("")
+        .trim();
+
+      if (mainline) {
+        tags.push(`mainline:${mainline}`);
+      }
 
       // Generate puzzles from the current tree
       // Each variation at each position becomes a puzzle
@@ -359,9 +407,15 @@ function BoardVariants() {
       await createFile({
         filename: fileName,
         filetype: "puzzle",
+        tags,
         pgn: puzzlesPGN,
         dir: documentDir,
       });
+
+      try {
+        window.dispatchEvent(new Event("puzzles:updated"));
+        window.dispatchEvent(new Event("puzzle-variants:updated"));
+      } catch {}
 
       notifications.show({
         title: t("common.save"),

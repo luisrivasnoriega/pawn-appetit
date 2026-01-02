@@ -160,7 +160,7 @@ function TournamentCard({ tournament, file }: { tournament: Event; file: string 
                             id: game.id,
                           },
                         });
-                        navigate({ to: "/boards" });
+                        navigate({ to: "/analysis" });
                       }}
                     >
                       <IconEye size="1rem" stroke={1.5} />

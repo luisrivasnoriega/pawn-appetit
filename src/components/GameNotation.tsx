@@ -462,6 +462,7 @@ function RenderMainline({
       <CompleteMoveCell
         annotations={variations[0].annotations}
         comment={variations[0].comment}
+        clockSeconds={variations[0].clock}
         halfMoves={variations[0].halfMoves}
         move={variations[0].san}
         fen={variations[0].fen}
@@ -577,6 +578,7 @@ function RenderVariations({
           targetRef={targetRef}
           annotations={variations[0].annotations}
           comment={variations[0].comment}
+          clockSeconds={variations[0].clock}
           halfMoves={variations[0].halfMoves}
           move={variations[0].san}
           fen={variations[0].fen}
@@ -607,6 +609,7 @@ function RenderVariations({
         targetRef={targetRef}
         annotations={variations[0].annotations}
         comment={variations[0].comment}
+        clockSeconds={variations[0].clock}
         halfMoves={variations[0].halfMoves}
         move={variations[0].san}
         fen={variations[0].fen}
@@ -777,6 +780,7 @@ function RenderRepertoire({
           targetRef={targetRef}
           annotations={variations[0].annotations}
           comment={variations[0].comment}
+          clockSeconds={variations[0].clock}
           halfMoves={variations[0].halfMoves}
           move={variations[0].san}
           fen={variations[0].fen}
@@ -903,6 +907,7 @@ function RepertoireCell({
       <CompleteMoveCell
         annotations={variation.annotations}
         comment={variation.comment}
+        clockSeconds={variation.clock}
         halfMoves={variation.halfMoves}
         move={variation.san}
         fen={variation.fen}
@@ -1373,6 +1378,7 @@ function ReportMoveCell({
           targetRef={targetRef}
           annotations={item.node.annotations}
           comment={item.node.comment}
+          clockSeconds={item.node.clock}
           halfMoves={item.node.halfMoves}
           move={item.node.san}
           fen={item.node.fen}

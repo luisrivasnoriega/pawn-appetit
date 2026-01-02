@@ -201,7 +201,7 @@ function Table({
         srcInfo: record,
         gameNumber: 0,
       });
-      navigate({ to: "/boards" });
+      navigate({ to: "/analysis" });
     },
     [setActiveTab, setTabs, navigate],
   );

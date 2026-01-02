@@ -151,7 +151,7 @@ function FileCard({
       srcInfo: file,
       gameNumber: 0,
     });
-    navigate({ to: "/boards" });
+    navigate({ to: "/analysis" });
   };
 
   const content: ReactNode = (

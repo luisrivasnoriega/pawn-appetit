@@ -20,26 +20,40 @@ function AccountCards({
   query = "",
   sortBy = { field: "name", direction: "asc" },
   isLoading = false,
+  platformFilter = "all",
+  onOpenPlayerDatabases,
 }: {
   databases: DatabaseInfo[];
   setDatabases: React.Dispatch<React.SetStateAction<DatabaseInfo[]>>;
   query?: string;
   sortBy?: SortState;
   isLoading?: boolean;
+  platformFilter?: "all" | "lichess" | "chesscom";
+  onOpenPlayerDatabases?: (playerName: string) => void;
 }) {
   const [sessions, setSessions] = useAtom(sessionsAtom);
+
+  const filteredSessions = useMemo(() => {
+    if (platformFilter === "lichess") {
+      return sessions.filter((s) => !!s.lichess);
+    }
+    if (platformFilter === "chesscom") {
+      return sessions.filter((s) => !!s.chessCom);
+    }
+    return sessions;
+  }, [platformFilter, sessions]);
 
   // Memoize player names extraction to avoid recalculation on every render
   const playerNames = useMemo(
     () =>
       Array.from(
         new Set(
-          sessions
+          filteredSessions
             .map((s) => s.player ?? s.lichess?.username ?? s.chessCom?.username)
             .filter((n): n is string => typeof n === "string" && n.length > 0),
         ),
       ),
-    [sessions],
+    [filteredSessions],
   );
 
   // Memoize player sessions grouping
@@ -47,11 +61,11 @@ function AccountCards({
     () =>
       playerNames.map((name) => ({
         name,
-        sessions: sessions.filter(
+        sessions: filteredSessions.filter(
           (s) => s.player === name || s.lichess?.username === name || s.chessCom?.username === name,
         ),
       })),
-    [playerNames, sessions],
+    [filteredSessions, playerNames],
   );
 
   // Memoize rating calculation functions to avoid recreation on every render
@@ -165,6 +179,7 @@ function AccountCards({
                 setSessions={setSessions}
                 isMain={mainAccount === name}
                 setMain={() => setMainAccount(name)}
+                onOpenPlayerDatabases={onOpenPlayerDatabases}
               />
             )),
           )}
@@ -182,6 +197,7 @@ function LichessOrChessCom({
   setSessions,
   isMain,
   setMain,
+  onOpenPlayerDatabases,
 }: {
   name: string;
   session: Session;
@@ -190,6 +206,7 @@ function LichessOrChessCom({
   setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
   isMain?: boolean;
   setMain?: () => void;
+  onOpenPlayerDatabases?: (playerName: string) => void;
 }) {
   if (session.lichess?.account) {
     const account = session.lichess.account;
@@ -300,6 +317,7 @@ function LichessOrChessCom({
         stats={stats}
         isMain={isMain}
         setMain={setMain}
+        onOpenPlayerDatabases={onOpenPlayerDatabases}
       />
     );
   }
@@ -392,6 +410,7 @@ function LichessOrChessCom({
         setDatabases={setDatabases}
         isMain={isMain}
         setMain={setMain}
+        onOpenPlayerDatabases={onOpenPlayerDatabases}
       />
     );
   }

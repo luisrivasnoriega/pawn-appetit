@@ -1,6 +1,6 @@
 import { ActionIcon, Button, Menu } from "@mantine/core";
 import { useClickOutside, useHotkeys, useToggle } from "@mantine/hooks";
-import { IconCopy, IconEdit, IconX } from "@tabler/icons-react";
+import { IconCopy, IconEdit, IconWindowMaximize, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,7 @@ export function BoardTab({
   closeTab,
   renameTab,
   duplicateTab,
+  openInNewWindow,
   selected,
 }: {
   tab: Tab;
@@ -21,6 +22,7 @@ export function BoardTab({
   closeTab: (v: string) => void;
   renameTab: (v: string, n: string) => void;
   duplicateTab: (v: string) => void;
+  openInNewWindow?: (tab: Tab) => void;
   selected: boolean;
 }) {
   const [open, toggleOpen] = useToggle();
@@ -52,10 +54,12 @@ export function BoardTab({
           className={cx(classes.tab, { [classes.selected]: selected })}
           variant="default"
           fw="normal"
+          data-tauri-drag-region={false}
           rightSection={
             <ActionIcon
               component="div"
               className={classes.closeTabBtn}
+              data-tauri-drag-region={false}
               onClick={(e) => {
                 closeTab(tab.value);
                 e.stopPropagation();
@@ -87,6 +91,7 @@ export function BoardTab({
             disabled={!renaming}
             html={tab.name}
             className={classes.input}
+            data-tauri-drag-region={false}
             onChange={(e) => renameTab(tab.value, e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") toggleRenaming(false);
@@ -95,6 +100,11 @@ export function BoardTab({
         </Button>
       </Menu.Target>
       <Menu.Dropdown>
+        {openInNewWindow ? (
+          <Menu.Item leftSection={<IconWindowMaximize size="0.875rem" />} onClick={() => openInNewWindow(tab)}>
+            {t("common.openTabInNewWindow")}
+          </Menu.Item>
+        ) : null}
         <Menu.Item leftSection={<IconCopy size="0.875rem" />} onClick={() => duplicateTab(tab.value)}>
           {t("common.duplicateTab")}
         </Menu.Item>

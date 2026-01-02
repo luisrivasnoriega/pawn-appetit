@@ -344,7 +344,7 @@ function GameTable() {
                 id: record.id,
               },
             });
-            navigate({ to: "/boards" });
+            navigate({ to: "/analysis" });
           }}
           columns={responsiveColumns}
           rowClassName={(_, i) => (i === selectedGame ? classes.selected : "")}

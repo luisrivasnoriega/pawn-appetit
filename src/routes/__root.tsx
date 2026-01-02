@@ -2,10 +2,9 @@ import { AppShell } from "@mantine/core";
 import { type HotkeyItem, useHotkeys } from "@mantine/hooks";
 import { ModalsProvider, modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { spotlight } from "@mantine/spotlight";
-import { useQuery } from "@tanstack/react-query";
+import { Spotlight, spotlight } from "@mantine/spotlight";
 import { createRootRouteWithContext, Outlet, useNavigate } from "@tanstack/react-router";
-import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import { Menu } from "@tauri-apps/api/menu";
 import { appLogDir, resolve } from "@tauri-apps/api/path";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ask, message, open } from "@tauri-apps/plugin-dialog";
@@ -15,18 +14,20 @@ import { check } from "@tauri-apps/plugin-updater";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { match } from "ts-pattern";
 import type { Dirs } from "@/App";
 import AboutModal from "@/components/About";
+import { getSpotlightActions } from "@/components/spotlightActions";
 import { SideBar } from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
+import { MayaHeader } from "@/components/MayaHeader";
 import ImportModal from "@/features/boards/components/ImportModal";
+import { getRouteForTab } from "@/features/boards/BoardsRouteEntry";
+import { useTabManagement } from "@/features/boards/hooks/useTabManagement";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
-import { activeTabAtom, tabsAtom } from "@/state/atoms";
 import { keyMapAtom } from "@/state/keybindings";
 import { openFile } from "@/utils/files";
 import { formatHotkeyDisplay } from "@/utils/formatHotkey";
-import { createTab } from "@/utils/tabs";
+import { debugNavLog, debugNavLogPaths } from "@/utils/debugNav";
+import { createTab, tabSchema } from "@/utils/tabs";
 
 type MenuGroup = {
   label: string;
@@ -51,11 +52,15 @@ const CLIPBOARD_OPERATIONS = {
 const APP_CONSTANTS = {
   NAVBAR_WIDTH: "3rem",
   HEADER_HEIGHT: "35px",
-  LOG_FILENAME: "pawn-appetit.log",
+  LOG_FILENAME: "obsidian-chess-studio.log",
 } as const;
 
 const isInputElement = (element: Element): element is HTMLInputElement | HTMLTextAreaElement => {
   return INPUT_ELEMENT_TAGS.has(element.tagName);
+};
+
+const isContentEditableElement = (element: Element): element is HTMLElement => {
+  return element instanceof HTMLElement && element.isContentEditable;
 };
 
 const getSelectedText = (element: HTMLInputElement | HTMLTextAreaElement): string => {
@@ -80,38 +85,6 @@ const writeToClipboard = (text: string): Promise<void> => navigator.clipboard.wr
 
 const readFromClipboard = (): Promise<string> => navigator.clipboard.readText();
 
-async function createMenu(menuActions: MenuGroup[]): Promise<Menu> {
-  const items = await Promise.all(
-    menuActions.map(async (group) => {
-      const submenuItems = await Promise.all(
-        group.options.map(async (option) => {
-          return match(option.label)
-            .with("divider", () =>
-              PredefinedMenuItem.new({
-                item: "Separator",
-              }),
-            )
-            .otherwise(() => {
-              return MenuItem.new({
-                id: option.id,
-                text: option.label,
-                accelerator: option.shortcut,
-                action: option.action,
-              });
-            });
-        }),
-      );
-
-      return Submenu.new({
-        text: group.label,
-        items: submenuItems,
-      });
-    }),
-  );
-
-  return Menu.new({ items });
-}
-
 export const Route = createRootRouteWithContext<{
   loadDirs: () => Promise<Dirs>;
 }>()({
@@ -123,9 +96,71 @@ function RootLayout() {
   const { t } = useTranslation();
   const { layout } = useResponsiveLayout();
 
-  const [, setTabs] = useAtom(tabsAtom);
-  const [, setActiveTab] = useAtom(activeTabAtom);
+  const { activeTab, setTabs, setActiveTab, closeTab } = useTabManagement({ enableHotkeys: false });
   const [keyMap] = useAtom(keyMapAtom);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const tearoffId = params.get("tearoff");
+    if (!tearoffId) return;
+
+    const payloadKey = `tearoff:${tearoffId}`;
+    const payloadJson = localStorage.getItem(payloadKey);
+    if (!payloadJson) return;
+
+    try {
+      const payload = JSON.parse(payloadJson) as {
+        tab?: unknown;
+        session?: Record<string, string>;
+      };
+
+      const parsed = tabSchema.safeParse(payload.tab);
+      if (!parsed.success) return;
+
+      const tab = parsed.data;
+
+      try {
+        if (payload.session) {
+          for (const [key, value] of Object.entries(payload.session)) {
+            sessionStorage.setItem(key, value);
+          }
+        }
+      } catch {}
+
+      setTabs((prev) => (prev.some((t) => t.value === tab.value) ? prev : [...prev, tab]));
+      setActiveTab(tab.value);
+      navigate({ to: getRouteForTab(tab) });
+    } finally {
+      try {
+        localStorage.removeItem(payloadKey);
+      } catch {}
+    }
+  }, [navigate, setActiveTab, setTabs]);
+
+  useEffect(() => {
+    void debugNavLogPaths();
+
+    const onError = (event: ErrorEvent) => {
+      debugNavLog("window.error", {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+      });
+    };
+
+    const onRejection = (event: PromiseRejectionEvent) => {
+      debugNavLog("unhandledrejection", event.reason);
+    };
+
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
 
   const openNewFile = useCallback(async () => {
     try {
@@ -148,12 +183,15 @@ function RootLayout() {
   }, [navigate, setActiveTab, setTabs, t]);
 
   const createNewTab = useCallback(() => {
-    navigate({ to: "/boards" });
     createTab({
-      tab: { name: t("features.tabs.newTab"), type: "new" },
+      tab: { name: t("features.tabs.analysisBoard.title"), type: "analysis" },
       setTabs,
       setActiveTab,
+      initialAnalysisTab: "analysis",
+      initialAnalysisSubTab: "report",
+      initialNotationView: "report" as const,
     });
+    navigate({ to: "/analysis" });
   }, [navigate, setActiveTab, setTabs, t]);
 
   const checkForUpdates = useCallback(async () => {
@@ -247,6 +285,23 @@ function RootLayout() {
           document.execCommand(CLIPBOARD_OPERATIONS.PASTE);
         } catch {}
       }
+    } else if (activeElement && isContentEditableElement(activeElement)) {
+      try {
+        const clipboardText = await readFromClipboard();
+        if (!clipboardText) return;
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(clipboardText));
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        activeElement.dispatchEvent(new Event("input", { bubbles: true }));
+        activeElement.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch {
+        // Let the browser handle it if possible.
+      }
     } else {
       try {
         document.execCommand(CLIPBOARD_OPERATIONS.PASTE);
@@ -268,6 +323,14 @@ function RootLayout() {
 
   const handleGlobalKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      if (
+        (activeElement && isInputElement(activeElement)) ||
+        (activeElement instanceof HTMLElement && activeElement.isContentEditable)
+      ) {
+        return;
+      }
+
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
 
@@ -312,7 +375,7 @@ function RootLayout() {
         [
           keyMap.PLAY_BOARD.keys,
           () => {
-            navigate({ to: "/boards" });
+            navigate({ to: "/play" });
             createTab({
               tab: { name: "Play", type: "play" },
               setTabs,
@@ -323,18 +386,21 @@ function RootLayout() {
         [
           keyMap.ANALYZE_BOARD.keys,
           () => {
-            navigate({ to: "/boards" });
+            navigate({ to: "/analysis" });
             createTab({
               tab: { name: t("features.tabs.analysisBoard.title"), type: "analysis" },
               setTabs,
               setActiveTab,
+              initialAnalysisTab: "analysis",
+              initialAnalysisSubTab: "report",
+              initialNotationView: "report" as const,
             });
           },
         ],
         [
           keyMap.IMPORT_BOARD.keys,
           () => {
-            navigate({ to: "/boards" });
+            navigate({ to: "/analysis" });
             modals.openContextModal({
               modal: "importModal",
               innerProps: {},
@@ -344,7 +410,7 @@ function RootLayout() {
         [
           keyMap.TRAIN_BOARD.keys,
           () => {
-            navigate({ to: "/boards" });
+            navigate({ to: "/puzzles" });
             createTab({
               tab: { name: t("features.tabs.puzzle.title"), type: "puzzles" },
               setTabs,
@@ -418,26 +484,17 @@ function RootLayout() {
   }, [t]);
 
   const handleCloseTab = useCallback(() => {
-    setTabs((prevTabs) => {
-      const activeIndex = prevTabs.findIndex((tab) => tab.value === prevTabs.find((t) => t.value)?.value);
-      if (activeIndex !== -1) {
-        const newTabs = prevTabs.filter((_, i) => i !== activeIndex);
-        if (newTabs.length > 0) {
-          const newActiveIndex = Math.min(activeIndex, newTabs.length - 1);
-          setActiveTab(newTabs[newActiveIndex].value);
-        } else {
-          setActiveTab(null);
-        }
-        return newTabs;
-      }
-      return prevTabs;
-    });
-  }, [setTabs, setActiveTab]);
+    void closeTab(activeTab);
+  }, [activeTab, closeTab]);
 
   const handleCloseAllTabs = useCallback(() => {
+    try {
+      sessionStorage.setItem("tabsClosedToZero", "1");
+    } catch {}
     setTabs([]);
     setActiveTab(null);
-  }, [setTabs, setActiveTab]);
+    navigate({ to: "/" });
+  }, [navigate, setActiveTab, setTabs]);
 
   const handleMinimizeWindow = useCallback(async () => {
     try {
@@ -501,32 +558,48 @@ function RootLayout() {
             shortcut: formatHotkeyDisplay(keyMap.NEW_BOARD_TAB.keys),
             action: createNewTab,
           },
-          {
-            label: t("features.menu.newPlayBoard"),
-            id: "new_play_board",
-            shortcut: formatHotkeyDisplay(keyMap.PLAY_BOARD.keys),
-            action: () => {
-              navigate({ to: "/boards" });
-              createTab({
-                tab: { name: "Play", type: "play" },
-                setTabs,
-                setActiveTab,
-              });
-            },
-          },
-          {
-            label: t("features.menu.newAnalysisBoard"),
-            id: "new_analysis_board",
-            shortcut: formatHotkeyDisplay(keyMap.ANALYZE_BOARD.keys),
-            action: () => {
-              navigate({ to: "/boards" });
-              createTab({
-                tab: { name: t("features.tabs.analysisBoard.title"), type: "analysis" },
-                setTabs,
-                setActiveTab,
-              });
-            },
-          },
+           {
+             label: t("features.menu.newPlayBoard"),
+             id: "new_play_board",
+             shortcut: formatHotkeyDisplay(keyMap.PLAY_BOARD.keys),
+             action: () => {
+               navigate({ to: "/play" });
+               createTab({
+                 tab: { name: "Play", type: "play" },
+                 setTabs,
+                 setActiveTab,
+               });
+             },
+           },
+           {
+             label: t("features.menu.newAnalysisBoard"),
+             id: "new_analysis_board",
+             shortcut: formatHotkeyDisplay(keyMap.ANALYZE_BOARD.keys),
+             action: () => {
+               navigate({ to: "/analysis" });
+               createTab({
+                 tab: { name: t("features.tabs.analysisBoard.title"), type: "analysis" },
+                 setTabs,
+                 setActiveTab,
+                 initialAnalysisTab: "analysis",
+                 initialAnalysisSubTab: "report",
+                 initialNotationView: "report" as const,
+               });
+             },
+           },
+           {
+             label: t("features.tabs.puzzle.title"),
+             id: "new_puzzles_board",
+             shortcut: formatHotkeyDisplay(keyMap.TRAIN_BOARD.keys),
+             action: () => {
+               navigate({ to: "/puzzles" });
+               createTab({
+                 tab: { name: t("features.tabs.puzzle.title"), type: "puzzles" },
+                 setTabs,
+                 setActiveTab,
+               });
+             },
+           },
           { label: "divider" },
           {
             label: t("features.menu.openFile"),
@@ -534,18 +607,18 @@ function RootLayout() {
             shortcut: formatHotkeyDisplay(keyMap.OPEN_FILE.keys),
             action: openNewFile,
           },
-          {
-            label: t("features.menu.importPgn"),
-            id: "import_pgn",
-            shortcut: formatHotkeyDisplay(keyMap.IMPORT_BOARD.keys),
-            action: () => {
-              navigate({ to: "/boards" });
-              modals.openContextModal({
-                modal: "importModal",
-                innerProps: {},
-              });
-            },
-          },
+           {
+             label: t("features.menu.importPgn"),
+             id: "import_pgn",
+             shortcut: formatHotkeyDisplay(keyMap.IMPORT_BOARD.keys),
+             action: () => {
+               navigate({ to: "/analysis" });
+               modals.openContextModal({
+                 modal: "importModal",
+                 innerProps: {},
+               });
+             },
+           },
         ],
       },
       {
@@ -620,11 +693,11 @@ function RootLayout() {
             id: "go_dashboard",
             action: () => navigate({ to: "/" }),
           },
-          {
-            label: t("features.menu.goToBoards"),
-            id: "go_boards",
-            action: () => navigate({ to: "/boards" }),
-          },
+           {
+             label: t("features.menu.goToBoards"),
+             id: "go_boards",
+             action: () => navigate({ to: "/analysis" }),
+           },
           {
             label: t("features.menu.goToAccounts"),
             id: "go_accounts",
@@ -745,63 +818,57 @@ function RootLayout() {
     ],
   );
 
-  const { data: menu, error: menuError } = useQuery({
-    queryKey: ["menu", menuActions],
-    queryFn: () => createMenu(menuActions),
-    staleTime: Infinity,
-  });
-
   useEffect(() => {
-    if (menuError) {
-      notifications.show({
-        title: t("notifications.menuError"),
-        message: t("notifications.failedToCreateMenu"),
-        color: "red",
-      });
-    }
-  }, [menuError, t]);
+    if (layout.menuBar.mode === "disabled") return;
 
-  useEffect(() => {
-    if (!menu) return;
+    const applyWindowChrome = async () => {
+      try {
+        const emptyMenu = await Menu.new();
+        await emptyMenu.setAsAppMenu();
+      } catch {}
 
-    const applyMenu = async () => {
-      if (layout.menuBar.mode === "disabled") return;
       try {
         const webviewWindow = getCurrentWebviewWindow();
-
-        if (layout.menuBar.mode === "native") {
-          await menu.setAsAppMenu();
-          await webviewWindow.setDecorations(true);
-        } else {
-          const emptyMenu = await Menu.new();
-          await emptyMenu.setAsAppMenu();
-          await webviewWindow.setDecorations(false);
-        }
+        await webviewWindow.setDecorations(false);
       } catch {}
     };
 
-    applyMenu();
-  }, [menu, layout.menuBar.mode]);
+    void applyWindowChrome();
+  }, [layout.menuBar.mode]);
 
   return (
     <ModalsProvider modals={{ importModal: ImportModal, aboutModal: AboutModal }}>
       <AppShell
         {...layout.appShellProps}
+        style={{ height: "100%", minHeight: 0 }}
         styles={{
           main: {
-            height: "100vh",
             userSelect: "none",
+            minHeight: 0,
+            height: "100%",
+            flex: 1,
           },
         }}
       >
         <AppShell.Header>
-          <TopBar menuActions={menuActions} />
+          <MayaHeader menuActions={menuActions} />
         </AppShell.Header>
         <AppShell.Navbar>{layout.sidebar.position === "navbar" && <SideBar />}</AppShell.Navbar>
-        <AppShell.Main style={{ display: "flex", flexDirection: "column" }}>
-          <Outlet />
+        <AppShell.Main style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <Outlet />
+          </div>
         </AppShell.Main>
         <AppShell.Footer>{layout.sidebar.position === "footer" && <SideBar />}</AppShell.Footer>
+
+        <Spotlight
+          actions={getSpotlightActions(navigate, t)}
+          shortcut={keyMap.SPOTLIGHT_SEARCH.keys}
+          nothingFound="Nothing found..."
+          highlightQuery
+          searchProps={{ placeholder: "Search..." }}
+          scrollable
+        />
       </AppShell>
     </ModalsProvider>
   );

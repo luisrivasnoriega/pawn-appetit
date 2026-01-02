@@ -49,7 +49,9 @@ export function WelcomeCard({
     if (
       fideInfo.photo.startsWith("http://") ||
       fideInfo.photo.startsWith("https://") ||
-      fideInfo.photo.startsWith("tauri://")
+      fideInfo.photo.startsWith("tauri://") ||
+      fideInfo.photo.startsWith("data:") ||
+      fideInfo.photo.startsWith("blob:")
     ) {
       setPhotoUrl(fideInfo.photo);
       return;

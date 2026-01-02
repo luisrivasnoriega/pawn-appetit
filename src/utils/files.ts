@@ -42,11 +42,15 @@ export async function openFile(
   // Read the file metadata from .info file to get the correct file type
   const metadataPath = file.replace(".pgn", ".info");
   let fileType: "game" | "repertoire" | "tournament" | "puzzle" | "variants" | "other" = "game";
+  let fileTags: string[] = [];
   if (await exists(metadataPath)) {
     try {
       const metadata = JSON.parse(await readTextFile(metadataPath));
       if (metadata.type) {
         fileType = metadata.type;
+      }
+      if (Array.isArray(metadata.tags)) {
+        fileTags = metadata.tags.filter((tag: unknown): tag is string => typeof tag === "string");
       }
     } catch {
       // If parsing fails, use default type
@@ -56,7 +60,7 @@ export async function openFile(
   const fileInfo: FileMetadata = {
     type: "file",
     metadata: {
-      tags: [],
+      tags: fileTags,
       type: fileType,
     },
     name: fileName,
@@ -95,11 +99,13 @@ export async function openFile(
 export async function createFile({
   filename,
   filetype,
+  tags,
   pgn,
   dir,
 }: {
   filename: string;
   filetype: "game" | "repertoire" | "tournament" | "puzzle" | "variants" | "other";
+  tags?: string[];
   pgn?: string;
   dir: string;
 }): Promise<Result<FileMetadata>> {
@@ -110,7 +116,7 @@ export async function createFile({
     }
     const metadata = {
       type: filetype,
-      tags: [],
+      tags: tags ?? [],
     };
     // Ensure directory exists
     if (!(await exists(dir))) {
@@ -138,15 +144,26 @@ export async function createTempImportFile(
   pgn: string,
   filetype: "game" | "repertoire" | "tournament" | "puzzle" | "variants" | "other" = "game",
 ): Promise<FileMetadata> {
-  const tempDirPath = await join(await tempDir(), "pawn-appetit");
-  const tempFilePath = await join(tempDirPath, `temp_import_${Date.now()}.pgn`);
+  const tempDirName = "obsidian-chess-studio";
+  const legacyTempDirName = "pawn-appetit";
+
+  let actualTempDirName = tempDirName;
 
   // Ensure temp directory exists
   try {
-    await mkdir("pawn-appetit", { baseDir: BaseDirectory.Temp });
+    await mkdir(tempDirName, { baseDir: BaseDirectory.Temp });
   } catch {
-    // Directory might already exist, continue
+    // If creation fails (permissions/platform quirks), fall back to the legacy folder name.
+    actualTempDirName = legacyTempDirName;
+    try {
+      await mkdir(legacyTempDirName, { baseDir: BaseDirectory.Temp });
+    } catch {
+      // ignore
+    }
   }
+
+  const tempDirPath = await join(await tempDir(), actualTempDirName);
+  const tempFilePath = await join(tempDirPath, `temp_import_${Date.now()}.pgn`);
 
   await writeTextFile(tempFilePath, pgn);
 

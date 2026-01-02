@@ -1,11 +1,10 @@
-import { ActionIcon, Menu, Tooltip } from "@mantine/core";
+import { ActionIcon, Box, ScrollArea, Stack, Tooltip } from "@mantine/core";
 import {
   IconArrowBack,
   IconCamera,
   IconChess,
   IconChessFilled,
   IconDeviceFloppy,
-  IconDotsVertical,
   IconEdit,
   IconEditOff,
   IconEraser,
@@ -41,6 +40,7 @@ interface BoardControlsMenuProps {
   count?: number;
   dirty?: boolean;
   autoSave?: boolean;
+  orientation?: "horizontal" | "vertical";
 }
 
 interface MenuItemConfig {
@@ -72,12 +72,15 @@ function BoardControlsMenu({
   addGame,
   toggleOrientation,
   currentTabSourceType,
-  count = 0,
+  count: _count = 0,
   dirty = false,
   autoSave = false,
+  orientation = "horizontal",
 }: BoardControlsMenuProps) {
   const keyMap = useAtomValue(keyMapAtom);
   const { t } = useTranslation();
+  // Academia Maya accent (matches the tab highlight line)
+  const accentColor = "#f9a825";
 
   // Define all menu items with their configurations
   const allMenuItems: MenuItemConfig[] = [
@@ -109,7 +112,12 @@ function BoardControlsMenu({
     {
       id: "changeTabType",
       condition: !!changeTabType,
-      icon: currentTabType === "analysis" ? <IconTarget size="1.3rem" /> : <IconZoomCheck size="1.3rem" />,
+      icon:
+        currentTabType === "analysis" ? (
+          <IconTarget size="1.3rem" />
+        ) : (
+          <IconZoomCheck size="1.3rem" />
+        ),
       onClick: () => changeTabType?.(),
       label: t(
         currentTabType === "analysis" ? "features.board.actions.playFromHere" : "features.board.actions.analyzeGame",
@@ -173,10 +181,6 @@ function BoardControlsMenu({
   // Filter items that should be shown
   const visibleItems = allMenuItems.filter((item) => item.condition);
 
-  // Split items: last 'count' items become separate buttons, rest stay in menu
-  const separateButtons = visibleItems.slice(-count);
-  const menuItems = visibleItems.slice(0, -count);
-
   const renderIcon = (item: MenuItemConfig) => {
     if (item.id === "pawnStructure") {
       return viewPawnStructure ? item.activeIcon || item.icon : item.icon;
@@ -187,33 +191,96 @@ function BoardControlsMenu({
     return item.icon;
   };
 
-  return (
-    <ActionIcon.Group>
-      {menuItems.length > 0 && (
-        <Menu closeOnItemClick={false}>
-          <Menu.Target>
-            <ActionIcon variant="default" size="lg">
-              <IconDotsVertical size="1rem" />
-            </ActionIcon>
-          </Menu.Target>
-          <Menu.Dropdown>
-            {menuItems.map((item) => (
-              <Menu.Item key={item.id} leftSection={renderIcon(item)} onClick={item.onClick}>
-                {item.label}
-              </Menu.Item>
-            ))}
-          </Menu.Dropdown>
-        </Menu>
-      )}
+  const shouldHighlight = currentTabType === "analysis";
+  const highlightStyles = shouldHighlight ? {} : {};
 
-      {separateButtons.map((item) => (
-        <Tooltip key={item.id} label={item.tooltipLabel || item.label}>
-          <ActionIcon onClick={item.onClick} size="lg" variant={item.variant || "default"}>
-            {renderIcon(item)}
-          </ActionIcon>
-        </Tooltip>
-      ))}
-    </ActionIcon.Group>
+  const getActionIconVariant = (item: MenuItemConfig): "subtle" | "light" => {
+    // Keep the "needs save" hint without adding borders.
+    if (item.id === "saveFile" && item.variant === "outline") return "light";
+    return "subtle";
+  };
+  const actionIconStyle = { color: accentColor } as const;
+  const actionIconStyles = {
+    root: {
+      color: accentColor,
+    },
+  } as const;
+
+  if (orientation === "vertical") {
+    return (
+      <ScrollArea
+        type="auto"
+        scrollbars="y"
+        h="100%"
+        scrollbarSize={6}
+        styles={{
+          viewport: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0.375rem",
+          },
+        }}
+      >
+        <Box
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0.375rem",
+            borderRadius: "12px",
+            ...highlightStyles,
+          }}
+        >
+          <Stack gap={6} align="center" py={2}>
+            {visibleItems.map((item) => (
+              <Tooltip key={item.id} label={item.tooltipLabel || item.label} position="left">
+                <ActionIcon
+                  onClick={item.onClick}
+                  size="lg"
+                  variant={getActionIconVariant(item)}
+                  style={actionIconStyle}
+                  styles={actionIconStyles}
+                >
+                  {renderIcon(item)}
+                </ActionIcon>
+              </Tooltip>
+            ))}
+          </Stack>
+        </Box>
+      </ScrollArea>
+    );
+  }
+
+  return (
+    <Box
+      style={{
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        alignSelf: "center",
+        padding: "0.375rem",
+        borderRadius: "12px",
+        ...highlightStyles,
+      }}
+    >
+      <ActionIcon.Group>
+        {visibleItems.map((item) => (
+          <Tooltip key={item.id} label={item.tooltipLabel || item.label}>
+            <ActionIcon
+              onClick={item.onClick}
+              size="lg"
+              variant={getActionIconVariant(item)}
+              style={actionIconStyle}
+              styles={actionIconStyles}
+            >
+              {renderIcon(item)}
+            </ActionIcon>
+          </Tooltip>
+        ))}
+      </ActionIcon.Group>
+    </Box>
   );
 }
 

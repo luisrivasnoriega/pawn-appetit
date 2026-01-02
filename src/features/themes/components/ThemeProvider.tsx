@@ -38,12 +38,18 @@ function ColorSchemeSync({ children }: ColorSchemeSyncProps) {
 function ThemeProvider({ children }: ThemeProviderProps) {
   const spellCheck = useAtomValue(spellCheckAtom);
   const currentTheme = useAtomValue(currentThemeAtom);
-  const colorScheme = useAtomValue(colorSchemeAtom);
+  const [colorScheme, setColorSchemePreference] = useAtom(colorSchemeAtom);
   const [, initializeTheme] = useAtom(initializeThemeAtom);
 
   useEffect(() => {
     initializeTheme();
   }, [initializeTheme]);
+
+  useEffect(() => {
+    if (currentTheme.id === "academia-maya" && colorScheme !== "dark") {
+      setColorSchemePreference("dark");
+    }
+  }, [colorScheme, currentTheme.id, setColorSchemePreference]);
 
   const config = {
     scale: currentTheme.scale,

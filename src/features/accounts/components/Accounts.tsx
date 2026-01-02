@@ -20,6 +20,8 @@ function Accounts({
   query,
   sortBy,
   isLoading = false,
+  platformFilter = "all",
+  onOpenPlayerDatabases,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -27,6 +29,8 @@ function Accounts({
   query: string;
   sortBy: SortState;
   isLoading?: boolean;
+  platformFilter?: "all" | "lichess" | "chesscom";
+  onOpenPlayerDatabases?: (playerName: string) => void;
 }) {
   const [, setSessions] = useAtom(sessionsAtom);
   const isListening = useRef(false);
@@ -128,6 +132,8 @@ function Accounts({
           query={query}
           sortBy={sortBy}
           isLoading={isLoading}
+          platformFilter={platformFilter}
+          onOpenPlayerDatabases={onOpenPlayerDatabases}
         />
       ) : (
         <AccountsTableView
@@ -136,6 +142,8 @@ function Accounts({
           query={query}
           sortBy={sortBy}
           isLoading={isLoading}
+          platformFilter={platformFilter}
+          onOpenPlayerDatabases={onOpenPlayerDatabases}
         />
       )}
       <AccountModal open={open} setOpen={setOpen} addLichess={addLichess} addChessCom={addChessCom} />

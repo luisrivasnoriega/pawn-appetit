@@ -13,7 +13,7 @@ import { decodeTCN } from "./tcn";
 
 const baseURL = "https://api.chess.com";
 const headers = {
-  "User-Agent": "Pawn Appetit",
+  "User-Agent": "Obsidian Chess Studio",
 };
 
 const ChessComPerf = z.object({
@@ -177,7 +177,7 @@ export async function downloadChessCom(player: string, timestamp: number | null)
   const archives = await getGameArchives(player);
   const file = await resolve(await appDataDir(), "db", `${player}_chesscom.pgn`);
   info(`Found ${archives.archives.length} archives for ${player}`);
-  writeTextFile(file, "", {
+  await writeTextFile(file, "", {
     append: false,
   });
   const filteredArchives = archives.archives.filter((archive) => {
@@ -202,11 +202,11 @@ export async function downloadChessCom(player: string, timestamp: number | null)
         color: "red",
         icon: <IconX />,
       });
-      if (response.status === 404) continue;
-      return;
-    }
+    if (response.status === 404) continue;
+    return;
+  }
 
-    writeTextFile(file, games.data.games.map((g) => g.pgn).join("\n"), {
+    await writeTextFile(file, games.data.games.map((g) => g.pgn).join("\n"), {
       append: true,
     });
     events.downloadProgress.emit({
